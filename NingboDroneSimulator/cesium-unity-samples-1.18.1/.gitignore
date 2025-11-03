@@ -1,0 +1,10 @@
+Library/
+UserSettings/
+Logs/
+obj/
+Temp/
+Assets/CesiumForUnity/
+.vs/
+.vsconfig
+*.sln
+*.csproj
