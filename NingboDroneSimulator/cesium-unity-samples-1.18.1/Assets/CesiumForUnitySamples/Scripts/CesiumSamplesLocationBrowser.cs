@@ -174,9 +174,11 @@ public class CesiumSamplesLocationBrowser : MonoBehaviour
         Vector3 rotationEulerAngles = this.transform.rotation.eulerAngles;
         // Prevent "roll" from being incorporated into the flight (to avoid motion sickness).
         this.transform.rotation = Quaternion.Euler(rotationEulerAngles.x, rotationEulerAngles.y, 0.0f);
+        Debug.Log("Applied Rotation: " + transform.rotation.eulerAngles);
         // Maintain the same rotation throughout the flight.
         this._flyToController.FlyToLocationEarthCenteredEarthFixed(
             location.CoordinatesEcef, rotationEulerAngles.y, rotationEulerAngles.x, false);
+        
     }
 
     private void Update()

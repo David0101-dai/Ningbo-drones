@@ -78,7 +78,7 @@ namespace BeanStudio
                     using (UnityWebRequest request = UnityWebRequest.Get(uri))
                     {
                         yield return request.SendWebRequest();
-                        if (request.isNetworkError || request.isHttpError)
+                        if (request.result == UnityWebRequest.Result.ConnectionError || request.result == UnityWebRequest.Result.ProtocolError)
                             Debug.Log("Error received. Code: " + request.responseCode);
                         else
                             HandleBuildingData(request.downloadHandler.text);
@@ -88,7 +88,7 @@ namespace BeanStudio
                     using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(uri))
                     {
                         yield return request.SendWebRequest();
-                        if (request.isNetworkError || request.isHttpError)
+                        if (request.result == UnityWebRequest.Result.ConnectionError || request.result == UnityWebRequest.Result.ProtocolError)
                             Debug.Log("Error received. Code: " + request.responseCode);
                         else
                             HandleTileMapData(((DownloadHandlerTexture)request.downloadHandler).texture);
