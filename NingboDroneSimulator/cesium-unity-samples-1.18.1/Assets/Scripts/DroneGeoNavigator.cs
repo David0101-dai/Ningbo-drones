@@ -163,7 +163,7 @@ public class DroneGeoNavigator : MonoBehaviour
         Vector3 nextPos = LLHToUnity(C);
         Vector3 rayDirection = (nextPos - currentPos).normalized;
         float detectionDistance = Mathf.Max((float)dtMeters, raycastMaxDistance); // 使用最大值，确保提前检测
-        Debug.Log("射线起点: " + currentPos + ", 终点: " + nextPos + ", 方向: " + rayDirection + ", 距离: " + detectionDistance);
+//        Debug.Log("射线起点: " + currentPos + ", 终点: " + nextPos + ", 方向: " + rayDirection + ", 距离: " + detectionDistance);
 
         if (Physics.SphereCast(currentPos, 1f, rayDirection, out RaycastHit hit, detectionDistance, buildingLayer)) // 使用 SphereCast 覆盖宽度
         {
@@ -178,8 +178,8 @@ public class DroneGeoNavigator : MonoBehaviour
         }
 
         anchor.longitudeLatitudeHeight = C;
-
-        Debug.Log("位置同步: " + anchor.longitudeLatitudeHeight + ", 当前位置: " + transform.position);
+////////////              //////////////////                  //////////////////                 /////////////////// 
+        //Debug.Log("位置同步: " + anchor.longitudeLatitudeHeight + ", 当前位置: " + transform.position);
 
         // —— 生成“期望前进方向”：lookahead + 拐角混合（全部用不同变量名，避免重名） —— //
         Vector3 cU_curr = LLHToUnity(C);
@@ -236,7 +236,8 @@ public class DroneGeoNavigator : MonoBehaviour
         // —— 段完成 —— //
         if (_tOnSegment >= 1.0 - 1e-6)
         {
-            Debug.Log("段完成，进度: " + _tOnSegment + ", 暂停状态: " + _collisionPaused);
+            //////////////            ////////////////                //////////////////              ///////////////////
+            //Debug.Log("段完成，进度: " + _tOnSegment + ", 暂停状态: " + _collisionPaused);
             _segmentIndex++;
             _tOnSegment = 0.0;
             _collisionPaused = false; // 重置暂停
