@@ -187,9 +187,9 @@ public class DroneGeoNavigator : MonoBehaviour
                 // ✅ 只在首次检测到时触发
                 if (!_emergencyStopped)
                 {
-                    _emergencyStopped = true;
-                    _externalEmergencyStop = true;
-                    Debug.LogWarning("[导航器] ⚠️ 检测到障碍，触发紧急停止");
+                    //_emergencyStopped = true;
+                    //_externalEmergencyStop = true;
+                    Debug.LogWarning("障碍物内部穿行！！！！");
                 }
                 // ✅ 已经停止的情况下，不重复设置
             }
