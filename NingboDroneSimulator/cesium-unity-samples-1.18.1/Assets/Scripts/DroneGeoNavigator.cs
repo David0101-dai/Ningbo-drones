@@ -45,7 +45,10 @@ public class DroneGeoNavigator : MonoBehaviour
     public bool showProgressLogs = true;
     public bool showPathGizmos = true;
     public bool showMovementLogs = false; // ✅ 新增：移动日志
-    
+
+    [Header("=== 可视化设置 ===")]
+    public Color pathGizmoColor = Color.cyan;
+
     #endregion
 
     #region 私有字段
@@ -59,6 +62,7 @@ public class DroneGeoNavigator : MonoBehaviour
     private bool _isStarted = false;
     private bool _emergencyStopped = false;
     private bool _externalEmergencyStop = false;
+    private string _logPrefix;
     
     #endregion
 
@@ -84,19 +88,20 @@ public class DroneGeoNavigator : MonoBehaviour
         if (!anchor) anchor = GetComponent<CesiumGlobeAnchor>();
         if (!georeference) georeference = FindObjectOfType<CesiumGeoreference>();
         anchor.adjustOrientationForGlobeWhenMoving = true;
+        _logPrefix = $"[导航器 {gameObject.name}]";
     }
 
     void Start()
     {
         if (!georeference)
         {
-            Debug.LogError("[导航器] 缺少CesiumGeoreference！");
+            Debug.LogError($"{_logPrefix} 缺少CesiumGeoreference！");
             enabled = false; return;
         }
         
         if (!waypointsParent)
         {
-            Debug.LogError("[导航器] 未指定航点父物体！");
+            Debug.LogError($"{_logPrefix} 未指定航点父物体！");
             enabled = false; return;
         }
 
@@ -111,12 +116,11 @@ public class DroneGeoNavigator : MonoBehaviour
         
         if (llh.Count < 2)
         {
-            Debug.LogError("[导航器] 航点不足（至少2个）！");
+            Debug.LogError($"{_logPrefix} 航点不足（至少2个）！");
             enabled = false; return;
         }
 
-        Debug.Log($"[导航器] 已加载{llh.Count}个航点");
-
+        Debug.Log($"{_logPrefix} 已加载{llh.Count}个航点");
         var densified = DensifyLlhLinear(llh, (double)densifyStepMeters);
         _pathLLH.Clear();
         _pathLLH.AddRange(densified);
@@ -126,7 +130,7 @@ public class DroneGeoNavigator : MonoBehaviour
         _hasFwd = false;
 
         anchor.longitudeLatitudeHeight = _pathLLH[0];
-        Debug.Log($"[导航器] 初始化完成，起点: {_pathLLH[0]}");
+        Debug.Log($"{_logPrefix} 初始化完成，起点: {_pathLLH[0]}");
     }
 
     void LateUpdate()
@@ -140,20 +144,20 @@ public class DroneGeoNavigator : MonoBehaviour
             {
                 if (Time.frameCount % 30 == 0)
                 {
-                    Debug.Log($"[导航器] 等待场景加载... {startupDelay - _startupTimer:F1}秒");
+                    Debug.Log($"{_logPrefix} 等待场景加载... {startupDelay - _startupTimer:F1}秒");
                 }
                 return;
             }
             
             _isStarted = true;
-            Debug.Log("[导航器] ✈️ 开始飞行！");
+            Debug.Log($"{_logPrefix} ✈️ 开始飞行！");
         }
 
         // ===== ✅ 修复：外部停止检查（添加详细日志） =====
         if (_externalEmergencyStop)
         {
             if (showMovementLogs)
-                Debug.Log($"[导航器] 外部停止中... (_externalEmergencyStop={_externalEmergencyStop})");
+                Debug.Log($"{_logPrefix}  外部停止中... (_externalEmergencyStop={_externalEmergencyStop})");
             return;
         }
 
@@ -161,7 +165,7 @@ public class DroneGeoNavigator : MonoBehaviour
         if (_pathLLH.Count < 2 || _segmentIndex >= _pathLLH.Count - 1)
         {
             if (showProgressLogs && _segmentIndex >= _pathLLH.Count - 1)
-                Debug.Log("[导航器] 🎯 已到达终点！");
+                Debug.Log($"{_logPrefix} 🎯 已到达终点！");
             return;
         }
 
@@ -189,7 +193,7 @@ public class DroneGeoNavigator : MonoBehaviour
                 {
                     //_emergencyStopped = true;
                     //_externalEmergencyStop = true;
-                    Debug.LogWarning("障碍物内部穿行！！！！");
+                    Debug.LogWarning($"{_logPrefix}:障碍物内部穿行！！！！");
                 }
                 // ✅ 已经停止的情况下，不重复设置
             }
@@ -224,7 +228,7 @@ public class DroneGeoNavigator : MonoBehaviour
         // ✅ 添加移动日志
         if (showMovementLogs && Time.frameCount % 10 == 0)
         {
-            Debug.Log($"[导航器] 移动中: 段{_segmentIndex}, 进度{_tOnSegment:F2}, 速度{distanceThisFrame:F2}m/frame");
+            Debug.Log($"{_logPrefix} 移动中: 段{_segmentIndex}, 进度{_tOnSegment:F2}, 速度{distanceThisFrame:F2}m/frame");
         }
 
         double3 currentLLH = new double3(
@@ -289,7 +293,7 @@ public class DroneGeoNavigator : MonoBehaviour
             if (showProgressLogs)
             {
                 float progress = (float)_segmentIndex / (_pathLLH.Count - 1) * 100f;
-                Debug.Log($"[导航器] 进度: {progress:F1}% (段 {_segmentIndex}/{_pathLLH.Count - 1})");
+                Debug.Log($"{_logPrefix} 进度: {progress:F1}% (段 {_segmentIndex}/{_pathLLH.Count - 1})");
             }
         }
     }
@@ -344,7 +348,8 @@ public class DroneGeoNavigator : MonoBehaviour
         if (sortWaypointsByName)
             System.Array.Sort(anchors, (a, b) => string.Compare(a.name, b.name, System.StringComparison.Ordinal));
 
-        Gizmos.color = Color.cyan;
+            // 主路径线段用可配置颜色
+        Gizmos.color = pathGizmoColor;
         for (int i = 0; i < anchors.Length - 1; i++)
         {
             Vector3 start = LLHToUnity(anchors[i].longitudeLatitudeHeight);

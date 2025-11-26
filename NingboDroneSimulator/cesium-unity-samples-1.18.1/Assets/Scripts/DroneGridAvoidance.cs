@@ -29,12 +29,14 @@ public class DroneGridAvoidance : MonoBehaviour
     private bool recentlyAvoided = false;
     private Vector3 avoidStartPos;
     private bool planningInProgress = false;
+    private string _logPrefix;
 
     void Awake()
     {
         navigator = GetComponent<DroneGeoNavigator>();
         if (navigator != null)
             georeference = navigator.georeference;
+        _logPrefix = $"[GridAvoid {gameObject.name}]";
     }
 
     void Update()
@@ -50,7 +52,7 @@ public class DroneGridAvoidance : MonoBehaviour
             {
                 recentlyAvoided = false;
                 if (logInfo)
-                    Debug.Log("[GridAvoid] 已离开上次避障区域，允许下一次避障");
+                    Debug.Log($"{_logPrefix} 已离开上次避障区域，允许下一次避障");
             }
             else
             {
@@ -113,7 +115,7 @@ public class DroneGridAvoidance : MonoBehaviour
     void PlanAndApplyDetour()
     {
         if (logInfo)
-            Debug.Log("[GridAvoid] 检测到障碍，开始计算绕行路径");
+            Debug.Log($"{_logPrefix} 检测到障碍，开始计算绕行路径");
 
         List<double3> path = navigator.GetPath();
         int currentSeg = navigator.GetCurrentSegmentIndex();
@@ -121,7 +123,7 @@ public class DroneGridAvoidance : MonoBehaviour
         if (path == null || path.Count < 2 || currentSeg >= path.Count - 1)
         {
             if (logInfo)
-                Debug.LogWarning("[GridAvoid] 路径无效，无法规划绕行");
+                Debug.LogWarning($"{_logPrefix} 路径无效，无法规划绕行");
             return;
         }
 
@@ -132,20 +134,20 @@ public class DroneGridAvoidance : MonoBehaviour
         if (joinIndex <= currentSeg + 1)
         {
             if (logInfo)
-                Debug.LogWarning("[GridAvoid] 没有找到合适的并入点，本次不避障");
+                Debug.LogWarning($"{_logPrefix} 没有找到合适的并入点，本次不避障");
             return;
         }
 
         Vector3 joinWorldPos = LLHToUnity(path[joinIndex]);
         if (logInfo)
-            Debug.Log($"[GridAvoid] 选择并入目标 index={joinIndex}, pos={joinWorldPos}");
+            Debug.Log($"{_logPrefix} 选择并入目标 index={joinIndex}, pos={joinWorldPos}");
 
         // 在 currentPos 和 joinWorldPos 之间用 A* 算一条折线
         List<Vector3> detourWorld = ComputeGridPath(currentPos, joinWorldPos, currentPos.y);
         if (detourWorld == null || detourWorld.Count == 0)
         {
             if (logInfo)
-                Debug.LogWarning("[GridAvoid] A* 未找到可行绕行路径");
+                Debug.LogWarning($"{_logPrefix} A* 未找到可行绕行路径");
             return;
         }
 
@@ -164,7 +166,7 @@ public class DroneGridAvoidance : MonoBehaviour
         recentlyAvoided = true;
 
         if (logInfo)
-            Debug.Log($"[GridAvoid] 插入绕行点 {detourLLH.Count} 个，移除原路径点 {removeCount} 个");
+            Debug.Log($"{_logPrefix} 插入绕行点 {detourLLH.Count} 个，移除原路径点 {removeCount} 个");
     }
 
     int FindJoinIndex(List<double3> path, int currentSeg, Vector3 currentPos)
@@ -254,7 +256,7 @@ public class DroneGridAvoidance : MonoBehaviour
         if (startNode == null || endNode == null)
         {
             if (logInfo)
-                Debug.LogWarning("[GridAvoid] 起点或终点附近没有可行走格子");
+                Debug.LogWarning($"{_logPrefix} 起点或终点附近没有可行走格子");
             return null;
         }
 
@@ -301,7 +303,7 @@ public class DroneGridAvoidance : MonoBehaviour
                 if (!ValidateDetour(startWorld, endWorld, pathWorld))
                 {
                     if (logInfo)
-                        Debug.LogWarning("[GridAvoid] 生成的绕行路径仍然与障碍相交，放弃本次规划");
+                        Debug.LogWarning($"{_logPrefix} 生成的绕行路径仍然与障碍相交，放弃本次规划");
                     return null;
                 }
 
@@ -337,7 +339,7 @@ public class DroneGridAvoidance : MonoBehaviour
 
         // 搜索失败
         if (logInfo)
-            Debug.LogWarning("[GridAvoid] A* 搜索失败或超过迭代次数");
+            Debug.LogWarning($"{_logPrefix} A* 搜索失败或超过迭代次数");
         return null;
     }
 
