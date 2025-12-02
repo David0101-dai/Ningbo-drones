@@ -23,6 +23,12 @@ public class DroneGridAvoidance : MonoBehaviour
     public bool logInfo = true;
     public bool drawDebug = true;
 
+    [Header("调试可视化")]
+    public bool debugDrawGridSlice = false;
+
+    [Tooltip("输出更详细的 A* 调试信息")]
+    public bool debugLogSearchDetails = true;
+
     private DroneGeoNavigator navigator;
     private CesiumGeoreference georeference;
 
@@ -210,7 +216,7 @@ public class DroneGridAvoidance : MonoBehaviour
         public float f => g + h;
     }
 
-    List<Vector3> ComputeGridPath(Vector3 startWorld, Vector3 endWorld, float yHeight)
+List<Vector3> ComputeGridPath(Vector3 startWorld, Vector3 endWorld, float yHeight)
     {
         float size = gridHalfSizeMeters;
         float cell = Mathf.Max(0.5f, cellSizeMeters);
@@ -221,6 +227,8 @@ public class DroneGridAvoidance : MonoBehaviour
         int gridSize = Mathf.Max(4, Mathf.CeilToInt((size * 2f) / cell));
 
         Node[,] grid = new Node[gridSize, gridSize];
+
+        int walkableCount = 0;
 
         for (int ix = 0; ix < gridSize; ix++)
         {
@@ -240,6 +248,9 @@ public class DroneGridAvoidance : MonoBehaviour
                 n.h = 0f;
                 n.parent = null;
 
+                if (n.walkable)
+                    walkableCount++;
+
                 grid[ix, iz] = n;
             }
         }
@@ -256,7 +267,8 @@ public class DroneGridAvoidance : MonoBehaviour
         if (startNode == null || endNode == null)
         {
             if (logInfo)
-                Debug.LogWarning($"{_logPrefix} 起点或终点附近没有可行走格子");
+                Debug.LogWarning($"{_logPrefix} 起点或终点附近没有可行走格子 " +
+                                 $"(walkable={walkableCount}/{gridSize * gridSize})");
             return null;
         }
 
@@ -274,6 +286,7 @@ public class DroneGridAvoidance : MonoBehaviour
 
         int maxIterations = gridSize * gridSize * 4;
         int iter = 0;
+        int visitedCount = 0;
 
         while (openList.Count > 0 && iter < maxIterations)
         {
@@ -293,18 +306,26 @@ public class DroneGridAvoidance : MonoBehaviour
 
             openList.RemoveAt(currentIndex);
             closedSet.Add(current);
+            visitedCount++;
 
             if (current == endNode)
             {
-                // 回溯 + 简化
                 List<Vector3> pathWorld = ReconstructPath(current, originX, originZ, cell, yHeight);
 
-                // 最终碰撞验证：确保每一条线段都不穿障碍
                 if (!ValidateDetour(startWorld, endWorld, pathWorld))
                 {
                     if (logInfo)
                         Debug.LogWarning($"{_logPrefix} 生成的绕行路径仍然与障碍相交，放弃本次规划");
                     return null;
+                }
+
+                if (debugLogSearchDetails && logInfo)
+                {
+                    Debug.Log($"{_logPrefix} A* 成功: visited={visitedCount}, " +
+                              $"walkable={walkableCount}/{gridSize * gridSize}, " +
+                              $"gridSize={gridSize}, " +
+                              $"start=({startNode.ix},{startNode.iz}), end=({endNode.ix},{endNode.iz}), " +
+                              $"iter={iter}");
                 }
 
                 return pathWorld;
@@ -337,12 +358,19 @@ public class DroneGridAvoidance : MonoBehaviour
             }
         }
 
-        // 搜索失败
+        bool hitIterationLimit = (iter >= maxIterations && openList.Count > 0);
+
         if (logInfo)
-            Debug.LogWarning($"{_logPrefix} A* 搜索失败或超过迭代次数");
+        {
+            string reason = hitIterationLimit ? "超出迭代上限" : "openList 为空，无路可达";
+            Debug.LogWarning(
+                $"{_logPrefix} A* 搜索失败: {reason}, " +
+                $"visited={visitedCount}, walkable={walkableCount}/{gridSize * gridSize}, gridSize={gridSize}, " +
+                $"start=({startNode.ix},{startNode.iz}), end=({endNode.ix},{endNode.iz}), iter={iter}");
+        }
+
         return null;
     }
-
     float Heuristic(Node a, Node b, float cell)
     {
         // 曼哈顿 + 对角启发
@@ -482,4 +510,81 @@ public class DroneGridAvoidance : MonoBehaviour
         double3 ecef = georeference.TransformUnityPositionToEarthCenteredEarthFixed(u);
         return CesiumWgs84Ellipsoid.EarthCenteredEarthFixedToLongitudeLatitudeHeight(ecef);
     }
+
+    #if UNITY_EDITOR
+    void OnDrawGizmosSelected()
+    {
+        // 只在勾选了调试、并且游戏在运行时画网格
+        if (!debugDrawGridSlice || !Application.isPlaying)
+            return;
+
+        if (navigator == null || georeference == null)
+            return;
+
+        // 起点：当前无人机位置
+        Vector3 startWorld = transform.position;
+
+        // 终点：复用一部分路径逻辑，取一个“未来的并入点”
+        List<double3> path = navigator.GetPath();
+        int currentSeg = navigator.GetCurrentSegmentIndex();
+
+        if (path == null || path.Count < 2 || currentSeg >= path.Count - 1)
+            return;
+
+        // 尝试用和运行时相同的策略选一个 joinIndex
+        int joinIndex = FindJoinIndex(path, currentSeg, startWorld);
+        joinIndex = Mathf.Clamp(joinIndex, currentSeg + 1, path.Count - 1);
+
+        Vector3 endWorld = LLHToUnity(path[joinIndex]);
+        float yHeight = startWorld.y;  // 使用当前无人机高度这一个水平切片
+
+        // === 下面开始重用 ComputeGridPath 的网格构造逻辑 ===
+
+        float size = gridHalfSizeMeters;
+        float cell = Mathf.Max(0.5f, cellSizeMeters);
+
+        // 网格中心：起点和并入点的中点
+        Vector3 mid = (startWorld + endWorld) * 0.5f;
+        float originX = mid.x - size;
+        float originZ = mid.z - size;
+        int gridSize = Mathf.Max(4, Mathf.CeilToInt((size * 2f) / cell));
+
+        // 画网格包围框（在当前高度画一个很薄的“框”）
+        Gizmos.color = Color.yellow;
+        Vector3 center = new Vector3(originX + size, yHeight, originZ + size);
+        Vector3 cubeSize = new Vector3(size * 2f, 0.1f, size * 2f);
+        Gizmos.DrawWireCube(center, cubeSize);
+
+        // 画起点 / 终点
+        Gizmos.color = Color.blue;
+        Gizmos.DrawSphere(startWorld, cell * 0.7f);
+
+        Gizmos.color = Color.magenta;
+        Gizmos.DrawSphere(endWorld, cell * 0.7f);
+
+        Gizmos.DrawLine(startWorld, endWorld);
+
+        // walkable / blocked 颜色（带一点透明度避免太刺眼）
+        Color walkableColor = new Color(0f, 1f, 0f, 0.25f);
+        Color blockedColor  = new Color(1f, 0f, 0f, 0.35f);
+
+        Vector3 cellSizeVec = new Vector3(cell, 0.05f, cell);
+
+        // 遍历整张网格，逐格调用 Physics.CheckSphere 决定是否 blocked，并画立方体
+        for (int ix = 0; ix < gridSize; ix++)
+        {
+            for (int iz = 0; iz < gridSize; iz++)
+            {
+                float cx = originX + (ix + 0.5f) * cell;
+                float cz = originZ + (iz + 0.5f) * cell;
+                Vector3 cpos = new Vector3(cx, yHeight, cz);
+
+                bool blocked = Physics.CheckSphere(cpos, cellCheckRadius, obstacleLayer);
+
+                Gizmos.color = blocked ? blockedColor : walkableColor;
+                Gizmos.DrawCube(cpos, cellSizeVec);
+            }
+        }
+    }
+#endif
 }
