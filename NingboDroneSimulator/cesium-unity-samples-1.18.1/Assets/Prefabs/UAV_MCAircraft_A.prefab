@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 7393651418898253026}
   - component: {fileID: 2178868115032404087}
   - component: {fileID: 1331128659972587919}
+  - component: {fileID: 3455872191160576865}
   - component: {fileID: 5291710196469027569}
   - component: {fileID: 5190808082399562373}
   m_Layer: 7
@@ -135,6 +136,22 @@ MonoBehaviour:
   drawDebug: 1
   debugDrawGridSlice: 1
   debugLogSearchDetails: 1
+--- !u!114 &3455872191160576865
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2133385408509951478}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cf4c7f6d5dcf5a848999d5281a66e12b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  displayName: AAA
+  uiColor: {r: 0, g: 1, b: 1, a: 1}
+  uiAnchor: {fileID: 9040535741330029267}
+  navigator: {fileID: 2178868115032404087}
 --- !u!65 &5291710196469027569
 BoxCollider:
   m_ObjectHideFlags: 0
