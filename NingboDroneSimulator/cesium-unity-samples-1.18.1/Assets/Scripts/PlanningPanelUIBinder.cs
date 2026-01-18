@@ -11,6 +11,9 @@ public class PlanningPanelUIBinder : MonoBehaviour
     public DroneFleetController fleet;
     public SwitchView switchView;
 
+    [Header("Route Apply Controller")]
+    public ApplyRuntimeRouteController applyRouteController;
+
     [Header("UI (auto-find by name if left empty)")]
     public Button enterPlanningButton;
     public Button exitPlanningButton;
@@ -20,6 +23,8 @@ public class PlanningPanelUIBinder : MonoBehaviour
 
     public Button pauseAllButton;   // optional
     public Button resumeAllButton;  // optional
+
+    public Button applyRouteButton; // ✅ 新增：生成 Waypoints_Runtime 并应用到当前无人机
 
     public TMP_Dropdown droneDropdown; // recommended TMP dropdown
     public TMP_Text statusText;        // optional
@@ -32,6 +37,7 @@ public class PlanningPanelUIBinder : MonoBehaviour
     public string clearPickName     = "ClearPickButton";
     public string pauseAllName      = "PauseAllButton";
     public string resumeAllName     = "ResumeAllButton";
+    public string applyRouteName    = "ApplyRouteButton";   // ✅ 新增
     public string droneDropdownName = "DroneDropdown";
     public string statusTextName    = "StatusText";
 
@@ -42,6 +48,7 @@ public class PlanningPanelUIBinder : MonoBehaviour
         if (!picker) picker = FindObjectOfType<MapPickController>();
         if (!fleet) fleet = FindObjectOfType<DroneFleetController>();
         if (!switchView) switchView = FindObjectOfType<SwitchView>();
+        if (!applyRouteController) applyRouteController = FindObjectOfType<ApplyRuntimeRouteController>();
 
         // ---- Auto find UI ----
         if (!enterPlanningButton) enterPlanningButton = FindButton(enterPlanningName);
@@ -53,11 +60,14 @@ public class PlanningPanelUIBinder : MonoBehaviour
         if (!pauseAllButton)      pauseAllButton      = FindButton(pauseAllName);
         if (!resumeAllButton)     resumeAllButton     = FindButton(resumeAllName);
 
+        if (!applyRouteButton)    applyRouteButton    = FindButton(applyRouteName);
+
         if (!droneDropdown)       droneDropdown       = FindDropdown(droneDropdownName);
         if (!statusText)          statusText          = FindTMPText(statusTextName);
 
         BindButtons();
         BindDropdown();
+        RefreshDropdownOptions();
         RefreshStatus();
     }
 
@@ -69,7 +79,6 @@ public class PlanningPanelUIBinder : MonoBehaviour
 
     void Update()
     {
-        // 轻量刷新，避免每帧刷太多日志
         if (Time.frameCount % 15 == 0)
             RefreshStatus();
     }
@@ -78,26 +87,64 @@ public class PlanningPanelUIBinder : MonoBehaviour
 
     void BindButtons()
     {
+        // ✅ 防重复：先清掉旧监听
         if (enterPlanningButton)
+        {
+            enterPlanningButton.onClick.RemoveAllListeners();
             enterPlanningButton.onClick.AddListener(() => planning?.EnterPlanningMode());
+        }
 
         if (exitPlanningButton)
+        {
+            exitPlanningButton.onClick.RemoveAllListeners();
             exitPlanningButton.onClick.AddListener(() => planning?.ExitPlanningMode());
+        }
 
         if (pickStartButton)
+        {
+            pickStartButton.onClick.RemoveAllListeners();
             pickStartButton.onClick.AddListener(() => picker?.SetPickStart());
+        }
 
         if (pickEndButton)
+        {
+            pickEndButton.onClick.RemoveAllListeners();
             pickEndButton.onClick.AddListener(() => picker?.SetPickEnd());
+        }
 
         if (clearPickButton)
+        {
+            clearPickButton.onClick.RemoveAllListeners();
             clearPickButton.onClick.AddListener(() => picker?.Clear());
+        }
 
         if (pauseAllButton)
+        {
+            pauseAllButton.onClick.RemoveAllListeners();
             pauseAllButton.onClick.AddListener(() => fleet?.PauseAll(true));
+        }
 
         if (resumeAllButton)
+        {
+            resumeAllButton.onClick.RemoveAllListeners();
             resumeAllButton.onClick.AddListener(() => fleet?.PauseAll(false));
+        }
+
+        // ✅ 新增：ApplyRoute
+        if (applyRouteButton)
+        {
+            applyRouteButton.onClick.RemoveAllListeners();
+            applyRouteButton.onClick.AddListener(() =>
+            {
+                if (!applyRouteController)
+                {
+                    Debug.LogWarning("[UIBinder] ApplyRuntimeRouteController not found.");
+                    return;
+                }
+                applyRouteController.ApplyToCurrentDrone();
+                RefreshStatus();
+            });
+        }
     }
 
     void BindDropdown()
@@ -106,8 +153,6 @@ public class PlanningPanelUIBinder : MonoBehaviour
 
         droneDropdown.onValueChanged.RemoveAllListeners();
         droneDropdown.onValueChanged.AddListener(OnDroneDropdownChanged);
-
-        RefreshDropdownOptions();
     }
 
     void OnDroneDropdownChanged(int index)
@@ -136,7 +181,6 @@ public class PlanningPanelUIBinder : MonoBehaviour
                 continue;
             }
 
-            // 取 DroneInfo 的根物体名作为无人机名（更符合你的命名：UAV_MCAircraft_A/B/C）
             var info = t.GetComponentInParent<DroneInfo>();
             options.Add(info ? info.gameObject.name : t.name);
         }
@@ -144,7 +188,7 @@ public class PlanningPanelUIBinder : MonoBehaviour
         droneDropdown.ClearOptions();
         droneDropdown.AddOptions(options);
 
-        // 尝试把 dropdown 设为当前目标（如果能取到）
+        // dropdown 设为当前目标
         var cur = switchView.CurrentDroneTarget;
         int curIndex = 0;
         if (cur != null)
@@ -168,19 +212,14 @@ public class PlanningPanelUIBinder : MonoBehaviour
             curName = info ? info.gameObject.name : switchView.CurrentDroneTarget.name;
         }
 
-        string pickMode = "(picker missing)";
-        if (picker)
-        {
-            pickMode = picker.mode.ToString();
-        }
+        string pickMode = picker ? picker.mode.ToString() : "(picker missing)";
+        string se = picker ? $"Start={(picker.HasStart ? "✔" : "—")}  End={(picker.HasEnd ? "✔" : "—")}" : "";
 
-        string se = "";
-        if (picker)
-        {
-            se = $"Start={(picker.HasStart ? "✔" : "—")}  End={(picker.HasEnd ? "✔" : "—")}";
-        }
+        // ✅ 增加一点提示：End 没选就提示
+        string hint = "";
+        if (picker && !picker.HasEnd) hint = "\nHint: 需要先选 End";
 
-        statusText.text = $"Current: {curName}\nPickMode: {pickMode}\n{se}";
+        statusText.text = $"Current: {curName}\nPickMode: {pickMode}\n{se}{hint}";
     }
 
     // ---------------- Find children by name ----------------
