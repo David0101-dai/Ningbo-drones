@@ -77,6 +77,85 @@ public class DroneGeoNavigator : MonoBehaviour
             Debug.Log($"[导航器] 外部停止状态变更: {wasExternalStop} → {stop}");
         }
     }
+    // ====== Phase 0: runtime controllable APIs ======
+    public void ForceStartNow()
+    {
+        // 跳过 startupDelay，立刻认为“已起飞”
+        _startupTimer = startupDelay;
+        _isStarted = true;
+    }
+
+    // 语义化封装：暂停/继续（内部复用你已有的外部停止开关）
+    public void PauseFlight(bool pause)
+    {
+        SetEmergencyStop(pause); // 你已有 SetEmergencyStop，会切换 _externalEmergencyStop
+    }
+
+    public bool IsPaused() => _externalEmergencyStop;
+
+    // 语义化封装：改速度（后面 CommandCenter/LLM 都直接调这个）
+    public void SetCruiseSpeed(double metersPerSecond)
+    {
+        cruiseSpeed = System.Math.Max(0.1, metersPerSecond);
+    }
+
+    // 运行时：重新扫描当前 waypointsParent 并重建路径
+    public bool ReloadFromWaypointsParent(bool warpToStart = false)
+    {
+        if (!georeference || !anchor || !waypointsParent) return false;
+
+        // 先暂停，避免重建路径时 LateUpdate 还在推进
+        bool prevStop = _externalEmergencyStop;
+        SetEmergencyStop(true);
+
+        try
+        {
+            var anchors = waypointsParent
+                .GetComponentsInChildren<CesiumForUnity.CesiumGlobeAnchor>(includeInactive: false)
+                .Where(a => a.gameObject != this.gameObject);
+
+            if (sortWaypointsByName)
+                anchors = anchors.OrderBy(a => a.name, System.StringComparer.Ordinal);
+
+            var llh = anchors.Select(a => a.longitudeLatitudeHeight).ToList();
+            if (llh.Count < 2) return false;
+
+            var densified = DensifyLlhLinear(llh, (double)densifyStepMeters);
+            _pathLLH.Clear();
+            _pathLLH.AddRange(densified);
+
+            _segmentIndex = 0;
+            _tOnSegment = 0.0;
+            _hasFwd = false;
+
+            if (warpToStart)
+                anchor.longitudeLatitudeHeight = _pathLLH[0];
+
+            if (showProgressLogs)
+                Debug.Log($"{_logPrefix} ✅ Reload route ok: points={_pathLLH.Count}, warp={warpToStart}");
+
+            return true;
+        }
+        finally
+        {
+            // 恢复原先外部 stop 状态
+            SetEmergencyStop(prevStop);
+        }
+    }
+
+    // 运行时：切换到一个新的 Waypoints_x 作为父节点，然后重建路径
+    public bool LoadRoute(Transform newWaypointsParent, bool warpToStart = false, bool startNow = true)
+    {
+        if (!newWaypointsParent) return false;
+
+        waypointsParent = newWaypointsParent;
+        bool ok = ReloadFromWaypointsParent(warpToStart);
+
+        if (ok && startNow)
+            ForceStartNow();
+
+        return ok;
+    }
 
     void Reset()
     {

@@ -8,3 +8,4 @@ Assets/CesiumForUnity/
 .vsconfig
 *.sln
 *.csproj
+llm_gateway/.venv/

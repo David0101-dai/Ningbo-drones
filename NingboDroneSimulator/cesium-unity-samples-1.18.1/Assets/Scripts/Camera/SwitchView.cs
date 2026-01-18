@@ -1,6 +1,8 @@
 // Assets/Scripts/SwitchView.cs
 using UnityEngine;
 using Cinemachine;
+using System;
+
 
 public class SwitchView : MonoBehaviour
 {
@@ -31,6 +33,19 @@ public class SwitchView : MonoBehaviour
     // 当前视角模式
     enum View { Side, Rear, TopDown }
     private View _currentView = View.Side;
+
+    public int CurrentDroneIndex => _currentDroneIndex;
+
+    public Transform CurrentDroneTarget
+    {
+        get
+        {
+            if (droneTargets == null || droneTargets.Length == 0) return null;
+            if (_currentDroneIndex < 0 || _currentDroneIndex >= droneTargets.Length) return null;
+            return droneTargets[_currentDroneIndex];
+        }
+    }
+
 
     void OnEnable()
     {
