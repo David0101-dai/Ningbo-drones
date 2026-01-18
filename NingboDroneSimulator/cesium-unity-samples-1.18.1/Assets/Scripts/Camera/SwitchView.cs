@@ -1,8 +1,6 @@
 // Assets/Scripts/SwitchView.cs
 using UnityEngine;
 using Cinemachine;
-using System;
-
 
 public class SwitchView : MonoBehaviour
 {
@@ -28,24 +26,48 @@ public class SwitchView : MonoBehaviour
     public Transform[] droneTargets;           // UAV_A 的 CamTarget, UAV_B 的 CamTarget, ...
 
     // 当前选中的无人机索引（0 = 数组里的第一个）
-    private int _currentDroneIndex = 0;
+    [SerializeField] private int _currentDroneIndex = 0;
 
     // 当前视角模式
-    enum View { Side, Rear, TopDown }
+    private enum View { Side, Rear, TopDown }
     private View _currentView = View.Side;
 
+    // ======== Public APIs (for UI/Other Scripts) ========
+
     public int CurrentDroneIndex => _currentDroneIndex;
+
+    public int DroneCount => (droneTargets != null) ? droneTargets.Length : 0;
 
     public Transform CurrentDroneTarget
     {
         get
         {
             if (droneTargets == null || droneTargets.Length == 0) return null;
-            if (_currentDroneIndex < 0 || _currentDroneIndex >= droneTargets.Length) return null;
+            _currentDroneIndex = Mathf.Clamp(_currentDroneIndex, 0, droneTargets.Length - 1);
             return droneTargets[_currentDroneIndex];
         }
     }
 
+    // 给 PlanningModeController / UI 用
+    public void SetTopDown() { ApplyView(View.TopDown); }
+    public void SetSide()    { ApplyView(View.Side); }
+    public void SetRear()    { ApplyView(View.Rear); }
+
+    // 给 UI Dropdown 用：直接切到指定 index 的无人机，并让 Side/Rear 跟随
+    public void SelectDroneByIndex(int index)
+    {
+        if (droneTargets == null || droneTargets.Length == 0) return;
+
+        _currentDroneIndex = Mathf.Clamp(index, 0, droneTargets.Length - 1);
+
+        // 保持当前视角模式不变，但 Side/Rear 必须跟随新目标
+        if (_currentView == View.Side || _currentView == View.Rear)
+        {
+            ApplyDroneTarget(_currentDroneIndex);
+        }
+    }
+
+    // ======== Unity lifecycle ========
 
     void OnEnable()
     {
@@ -66,17 +88,13 @@ public class SwitchView : MonoBehaviour
         if (_currentView != View.TopDown && droneTargets != null && droneTargets.Length > 0)
         {
             if (Input.GetKeyDown(nextDroneKey))
-            {
                 SelectNextDrone();
-            }
             else if (Input.GetKeyDown(prevDroneKey))
-            {
                 SelectPrevDrone();
-            }
         }
     }
 
-    //=============== 视角模式相关 ===============
+    // ======== 内部实现 ========
 
     void ApplyView(View v)
     {
@@ -86,7 +104,7 @@ public class SwitchView : MonoBehaviour
         SetPrio(rearChase, v == View.Rear);
         SetPrio(topDown,   v == View.TopDown);
 
-        // 切换视角时，保证 Side / Rear 始终跟当前选中的无人机
+        // 切换到 Side / Rear 时，保证跟随当前选中的无人机
         if (v == View.Side || v == View.Rear)
         {
             ApplyDroneTarget(_currentDroneIndex);
@@ -98,8 +116,6 @@ public class SwitchView : MonoBehaviour
         if (!vcam) return;
         vcam.Priority = active ? activePriority : inactivePriority;
     }
-
-    //=============== 无人机目标切换相关 ===============
 
     void SelectNextDrone()
     {

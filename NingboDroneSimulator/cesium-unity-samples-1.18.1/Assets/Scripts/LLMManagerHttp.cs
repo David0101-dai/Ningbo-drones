@@ -6,8 +6,15 @@ using UnityEngine.Networking;
 
 public class LLMManagerHttp : MonoBehaviour
 {
+    void OnDisable() { StopAllCoroutines(); }
+    void OnDestroy() { StopAllCoroutines(); }
+
+    [Header("Core")]
     public DroneCommandCenter commandCenter;
     public SwitchView switchView;
+
+    [Header("Fleet (for pause_all/resume_all)")]
+    public DroneFleetController fleet;
 
     [Header("Gateway URL")]
     public string gatewayUrl = "http://127.0.0.1:8000/command";
@@ -33,8 +40,12 @@ public class LLMManagerHttp : MonoBehaviour
     [Serializable]
     public class LlmCommand
     {
-        public string type;   // pause/resume/set_speed/select_route
-        public string drone;  // "current" or explicit name or null
+        // pause/resume/set_speed/select_route/pause_all/resume_all
+        public string type;
+
+        // "current" or explicit name or null
+        public string drone;
+
         public string route;
         public double speed;
     }
@@ -43,6 +54,7 @@ public class LLMManagerHttp : MonoBehaviour
     {
         if (!commandCenter) commandCenter = FindObjectOfType<DroneCommandCenter>();
         if (!switchView) switchView = FindObjectOfType<SwitchView>();
+        if (!fleet) fleet = FindObjectOfType<DroneFleetController>();
     }
 
     public void SendUserText(string text)
@@ -55,10 +67,7 @@ public class LLMManagerHttp : MonoBehaviour
         if (string.IsNullOrWhiteSpace(userText) || !commandCenter || !switchView)
             yield break;
 
-        // 当前相机跟踪的无人机（通过 CamTarget 找 DroneInfo -> navigator）
         string currentDroneName = GetCurrentDroneName();
-
-        // 可用路线（你也可以从场景 WaypointsRoot 动态扫描）
         string[] routes = new[] { "Waypoints_A", "Waypoints_B", "Waypoints_C", "Waypoints_Runtime" };
 
         var reqObj = new CommandRequest
@@ -100,7 +109,9 @@ public class LLMManagerHttp : MonoBehaviour
 
             if (resp != null)
             {
-                LogOut(resp.say);
+                if (!string.IsNullOrEmpty(resp.say))
+                    LogOut(resp.say);
+
                 Execute(resp);
             }
         }
@@ -108,6 +119,7 @@ public class LLMManagerHttp : MonoBehaviour
 
     string GetCurrentDroneName()
     {
+        // 依赖你 SwitchView 暴露的当前目标
         var t = switchView.CurrentDroneTarget;
         if (!t) return "";
 
@@ -117,30 +129,62 @@ public class LLMManagerHttp : MonoBehaviour
 
     void Execute(LlmResponse resp)
     {
-        if (resp.commands == null) return;
+        if (resp.commands == null || resp.commands.Length == 0)
+            return;
 
         string current = GetCurrentDroneName();
 
         foreach (var c in resp.commands)
         {
-            if (c == null || string.IsNullOrEmpty(c.type)) continue;
+            if (c == null || string.IsNullOrEmpty(c.type))
+                continue;
 
-            // 默认控制 current
-            string drone = string.IsNullOrEmpty(c.drone) || c.drone == "current" ? current : c.drone;
+            string type = c.type.Trim().ToLowerInvariant();
 
-            switch (c.type)
+            // ===== 全体命令（不需要 drone 字段）=====
+            if (type == "pause_all")
+            {
+                if (fleet) fleet.PauseAll(true);
+                else LogOut("[LLM] pause_all failed: DroneFleetController not found.");
+                continue;
+            }
+
+            if (type == "resume_all")
+            {
+                if (fleet) fleet.PauseAll(false);
+                else LogOut("[LLM] resume_all failed: DroneFleetController not found.");
+                continue;
+            }
+
+            // ===== 单机命令：默认控制 current =====
+            string drone = (string.IsNullOrEmpty(c.drone) || c.drone == "current") ? current : c.drone;
+
+            if (string.IsNullOrEmpty(drone))
+            {
+                LogOut($"[LLM] Skip '{type}': current drone is empty.");
+                continue;
+            }
+
+            switch (type)
             {
                 case "pause":
                     commandCenter.Pause(drone, true);
                     break;
+
                 case "resume":
                     commandCenter.Pause(drone, false);
                     break;
+
                 case "set_speed":
                     commandCenter.SetSpeed(drone, c.speed);
                     break;
+
                 case "select_route":
                     commandCenter.SelectRoute(drone, c.route);
+                    break;
+
+                default:
+                    LogOut($"[LLM] Unknown command type: {type}");
                     break;
             }
         }

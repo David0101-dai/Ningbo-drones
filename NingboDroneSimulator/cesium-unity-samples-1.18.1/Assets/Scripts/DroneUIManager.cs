@@ -11,6 +11,7 @@ public class DroneUIManager : MonoBehaviour
 
     [Header("是否自动查找场景中所有 DroneInfo")]
     public bool autoFindDrones = true;
+    
 
     private readonly List<DroneMarkerUI> _markers = new List<DroneMarkerUI>();
 

@@ -73,11 +73,11 @@ public class DroneGridAvoidance : MonoBehaviour
             return;
 
         planningInProgress = true;
-        navigator.SetEmergencyStop(true);
+        navigator.SetStop(DroneGeoNavigator.StopReason.Avoidance, true);
 
         PlanAndApplyDetour();
 
-        navigator.SetEmergencyStop(false);
+        navigator.SetStop(DroneGeoNavigator.StopReason.Avoidance, false);
         planningInProgress = false;
     }
 

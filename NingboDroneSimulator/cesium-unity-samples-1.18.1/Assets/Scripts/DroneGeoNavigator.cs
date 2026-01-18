@@ -61,22 +61,41 @@ public class DroneGeoNavigator : MonoBehaviour
     private float _startupTimer = 0f;
     private bool _isStarted = false;
     private bool _emergencyStopped = false;
-    private bool _externalEmergencyStop = false;
+    
+    [System.Flags]
+    public enum StopReason
+    {
+        None     = 0,
+        External = 1 << 0, // UI/LLM/全体暂停
+        Avoidance= 1 << 1, // 避障脚本临时停
+        System   = 1 << 2, // 代码内部：比如重建路径时临时停
+    }
+
+    private StopReason _stopReasons = StopReason.None;
+
     private string _logPrefix;
     
     #endregion
 
-    public void SetEmergencyStop(bool stop)
+    public void SetStop(StopReason reason, bool stop)
     {
-        bool wasExternalStop = _externalEmergencyStop;
-        _externalEmergencyStop = stop;
-        
-        // ✅ 添加日志确认
-        if (wasExternalStop != stop)
+        StopReason before = _stopReasons;
+
+        if (stop) _stopReasons |= reason;
+        else      _stopReasons &= ~reason;
+
+        if (before != _stopReasons)
         {
-            Debug.Log($"[导航器] 外部停止状态变更: {wasExternalStop} → {stop}");
+            Debug.Log($"{_logPrefix} StopReasons: {before} -> {_stopReasons}");
         }
     }
+
+    // 兼容旧接口：SetEmergencyStop 现在等价于 “外部暂停”
+    public void SetEmergencyStop(bool stop)
+    {
+        SetStop(StopReason.External, stop);
+    }
+
     // ====== Phase 0: runtime controllable APIs ======
     public void ForceStartNow()
     {
@@ -91,7 +110,8 @@ public class DroneGeoNavigator : MonoBehaviour
         SetEmergencyStop(pause); // 你已有 SetEmergencyStop，会切换 _externalEmergencyStop
     }
 
-    public bool IsPaused() => _externalEmergencyStop;
+    public bool IsPaused() => (_stopReasons & StopReason.External) != 0;
+    public bool IsStopped() => _stopReasons != StopReason.None;
 
     // 语义化封装：改速度（后面 CommandCenter/LLM 都直接调这个）
     public void SetCruiseSpeed(double metersPerSecond)
@@ -105,8 +125,8 @@ public class DroneGeoNavigator : MonoBehaviour
         if (!georeference || !anchor || !waypointsParent) return false;
 
         // 先暂停，避免重建路径时 LateUpdate 还在推进
-        bool prevStop = _externalEmergencyStop;
-        SetEmergencyStop(true);
+        StopReason before = _stopReasons;
+        SetStop(StopReason.System, true);
 
         try
         {
@@ -138,8 +158,7 @@ public class DroneGeoNavigator : MonoBehaviour
         }
         finally
         {
-            // 恢复原先外部 stop 状态
-            SetEmergencyStop(prevStop);
+             _stopReasons = before; // 恢复所有原因（最稳）
         }
     }
 
@@ -214,6 +233,14 @@ public class DroneGeoNavigator : MonoBehaviour
 
     void LateUpdate()
     {
+        // ===== 停止原因检查（最优先）=====
+        if (_stopReasons != StopReason.None)
+        {
+            if (showMovementLogs)
+                Debug.Log($"{_logPrefix} stopped: {_stopReasons}");
+            return;
+        }
+
         // ===== 启动延迟 =====
         if (!_isStarted)
         {
@@ -230,14 +257,6 @@ public class DroneGeoNavigator : MonoBehaviour
             
             _isStarted = true;
             Debug.Log($"{_logPrefix} ✈️ 开始飞行！");
-        }
-
-        // ===== ✅ 修复：外部停止检查（添加详细日志） =====
-        if (_externalEmergencyStop)
-        {
-            if (showMovementLogs)
-                Debug.Log($"{_logPrefix}  外部停止中... (_externalEmergencyStop={_externalEmergencyStop})");
-            return;
         }
 
         // ===== 路径完成检查 =====
