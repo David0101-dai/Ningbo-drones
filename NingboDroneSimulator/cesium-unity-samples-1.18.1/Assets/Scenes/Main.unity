@@ -2522,17 +2522,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   georeference: {fileID: 674938701}
   runtimeWaypointsParent: {fileID: 684568681}
-  safetyRadius: 2
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 383
-  maxRayDistance: 500000
-  cruiseHeightOffset: 30
+  safetyRadius: 2
+  pickLiftMin: 5
+  cruiseHeightOffset: 10
   heightStep: 15
   maxHeightRetries: 8
-  detourTries: 8
-  detourOffsetMin: 20
-  detourOffsetMax: 120
+  escapeRadiusMin: 10
+  escapeRadiusMax: 120
+  escapeRadiusStep: 10
+  escapeAngles: 16
+  enableRrtMidPath: 1
+  rrtMaxIters: 1200
+  rrtStep: 30
+  rrtGoalBias: 0.2
+  rrtBoundsMargin: 200
+  rrtPathMaxPoints: 60
   allowFallbackWhenBlocked: 1
 --- !u!4 &675031200
 Transform:
