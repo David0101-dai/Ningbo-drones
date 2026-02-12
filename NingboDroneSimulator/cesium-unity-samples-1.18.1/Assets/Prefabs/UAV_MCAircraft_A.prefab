@@ -1,5 +1,36 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &718514341769369532
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5575849860006818594}
+  m_Layer: 7
+  m_Name: InfoPanel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5575849860006818594
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 718514341769369532}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 9040535741330029267}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2133385408509951478
 GameObject:
   m_ObjectHideFlags: 0
@@ -37,6 +68,7 @@ Transform:
   m_Children:
   - {fileID: 374428425589489066}
   - {fileID: 7942210653193002110}
+  - {fileID: 5575849860006818594}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0.002, z: 0.001}
 --- !u!114 &7393651418898253026
@@ -91,7 +123,7 @@ MonoBehaviour:
   anchor: {fileID: 7393651418898253026}
   waypointsParent: {fileID: 0}
   sortWaypointsByName: 1
-  cruiseSpeed: 15
+  cruiseSpeed: 5
   densifyStepMeters: 15
   autoFaceForward: 1
   headingSmoothMin: 4
@@ -105,8 +137,8 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 8
   emergencyStopDistance: 3
-  showProgressLogs: 1
-  showPathGizmos: 1
+  showProgressLogs: 0
+  showPathGizmos: 0
   showMovementLogs: 0
   pathGizmoColor: {r: 0, g: 1, b: 1, a: 1}
 --- !u!114 &1331128659972587919
@@ -132,10 +164,10 @@ MonoBehaviour:
   cellSizeMeters: 3
   cellCheckRadius: 2
   minDistanceAfterAvoid: 35
-  logInfo: 1
-  drawDebug: 1
-  debugDrawGridSlice: 1
-  debugLogSearchDetails: 1
+  logInfo: 0
+  drawDebug: 0
+  debugDrawGridSlice: 0
+  debugLogSearchDetails: 0
 --- !u!114 &3455872191160576865
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -149,9 +181,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   displayName: AAA
-  uiColor: {r: 0, g: 1, b: 1, a: 1}
+  uiColor: {r: 0, g: 0.7987421, b: 0.7987421, a: 0.43529412}
   uiAnchor: {fileID: 9040535741330029267}
   navigator: {fileID: 2178868115032404087}
+  infoPanelPrefab: {fileID: 6044137641284671409, guid: bcda4c86afb3814439a8d464102d48b2,
+    type: 3}
 --- !u!65 &5291710196469027569
 BoxCollider:
   m_ObjectHideFlags: 0
