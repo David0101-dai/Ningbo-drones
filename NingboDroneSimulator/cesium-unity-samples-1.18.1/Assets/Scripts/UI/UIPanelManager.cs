@@ -16,6 +16,9 @@ public class UIPanelManager : MonoBehaviour
     [SerializeField] private Button pauseAllButton;
     [SerializeField] private Button resumeAllButton;
     [SerializeField] private Button enterPlanningButton;
+    [SerializeField] private Button saveLogButton;
+    [SerializeField] private Button loadReplayButton;
+    [SerializeField] private Button startReplayButton;   
 
     [Header("Planning Mode UI")]
     [SerializeField] private Button exitPlanningButton;
@@ -48,6 +51,11 @@ public class UIPanelManager : MonoBehaviour
     public string applyRouteName    = "ApplyRouteButton";
     public string droneDropdownName = "DroneDropdown";
     public string statusTextName    = "StatusText";
+    public string saveLogName       = "SaveLogButton";
+    public string loadReplayName    = "LoadReplayButton";
+    public string startReplayName     = "StartReplayButton";
+    
+
 
     void Awake()
     {
@@ -70,6 +78,9 @@ public class UIPanelManager : MonoBehaviour
         if (!applyRouteButton)    applyRouteButton    = FindButton(applyRouteName);
         if (!droneDropdown)       droneDropdown       = FindDropdown(droneDropdownName);
         if (!statusText)          statusText          = FindTMPText(statusTextName);
+        if (!saveLogButton)       saveLogButton       = FindButton(saveLogName);
+        if (!loadReplayButton)    loadReplayButton    = FindButton(loadReplayName);
+        if (!startReplayButton)   startReplayButton   = FindButton(startReplayName);
 
         // 默认模式设置
         if (defaultPanel) defaultPanel.SetActive(true);
@@ -162,6 +173,37 @@ public class UIPanelManager : MonoBehaviour
         {
             droneDropdown.onValueChanged.RemoveAllListeners();
             droneDropdown.onValueChanged.AddListener(OnDroneDropdownChanged);
+        }
+        if (saveLogButton)  
+        {
+            saveLogButton.onClick.RemoveAllListeners();
+            saveLogButton.onClick.AddListener(() => Logger.Instance.SaveLog());
+        }
+        if (loadReplayButton)   
+        {
+            loadReplayButton.onClick.RemoveAllListeners();
+            loadReplayButton.onClick.AddListener(OnLoadReplay);
+        }
+        if (startReplayButton)
+        {
+            startReplayButton.onClick.RemoveAllListeners();
+            startReplayButton.onClick.AddListener(() => ReplayManager.Instance.StartReplay());
+        }
+    }
+
+    private void OnLoadReplay()
+    {
+        // 使用异步加载，避免卡顿
+        string path = Application.persistentDataPath + "/FlightLog_20260215_204055.json"; // 请改成你实际的文件名
+        
+        if (ReplayManager.Instance != null)
+        {
+            ReplayManager.Instance.LoadReplayAsync(path);   // 注意改成 LoadReplayAsync
+            Debug.Log("[UI] 开始异步加载回放文件...");
+        }
+        else
+        {
+            Debug.LogError("[UI] ReplayManager 未找到！");
         }
     }
 
@@ -321,4 +363,6 @@ public class UIPanelManager : MonoBehaviour
     {
         if (outputText) outputText.text = msg;
     }
+
+    
 }

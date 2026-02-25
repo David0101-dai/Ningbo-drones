@@ -3,6 +3,7 @@ using System.Collections;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
+using Unity.Mathematics;   // ← 新增这行，用于 double3
 
 public class LLMManagerHttp : MonoBehaviour
 {
@@ -40,12 +41,8 @@ public class LLMManagerHttp : MonoBehaviour
     [Serializable]
     public class LlmCommand
     {
-        // pause/resume/set_speed/select_route/pause_all/resume_all
         public string type;
-
-        // "current" or explicit name or null
         public string drone;
-
         public string route;
         public double speed;
     }
@@ -59,7 +56,7 @@ public class LLMManagerHttp : MonoBehaviour
 
     public void SendUserText(string text)
     {
-        Debug.Log($"[LLM Debug] SendUserText called with text: '{text}'"); // Debug: 输入调用
+        Debug.Log($"[LLM Debug] SendUserText called with text: '{text}'");
         StartCoroutine(CallGateway(text));
     }
 
@@ -84,7 +81,7 @@ public class LLMManagerHttp : MonoBehaviour
         string json = JsonUtility.ToJson(reqObj);
         byte[] body = Encoding.UTF8.GetBytes(json);
 
-        Debug.Log($"[LLM Debug] Sending request to {gatewayUrl} with JSON: {json}"); // Debug: 请求内容
+        Debug.Log($"[LLM Debug] Sending request to {gatewayUrl} with JSON: {json}");
 
         using (var req = new UnityWebRequest(gatewayUrl, "POST"))
         {
@@ -95,28 +92,28 @@ public class LLMManagerHttp : MonoBehaviour
 
             yield return req.SendWebRequest();
 
-            Debug.Log($"[LLM Debug] Response received with code: {req.responseCode}"); // Debug: 响应码
+            Debug.Log($"[LLM Debug] Response received with code: {req.responseCode}");
 
             if (req.result != UnityWebRequest.Result.Success)
             {
                 LogOut($"[LLM] Request failed: {req.error}");
-                Debug.LogError($"[LLM Debug] Full error details: {req.error} - Response: {req.downloadHandler.text}"); // Debug: 错误详情
+                Debug.LogError($"[LLM Debug] Full error details: {req.error} - Response: {req.downloadHandler.text}");
                 yield break;
             }
 
             string respJson = req.downloadHandler.text;
-            Debug.Log($"[LLM Debug] Raw response JSON: {respJson}"); // Debug: 原始响应
+            Debug.Log($"[LLM Debug] Raw response JSON: {respJson}");
 
             LlmResponse resp;
             try
             {
                 resp = JsonUtility.FromJson<LlmResponse>(respJson);
-                Debug.Log($"[LLM Debug] JSON parsed successfully: say='{resp.say}', commands count={resp.commands?.Length ?? 0}"); // Debug: 解析结果
+                Debug.Log($"[LLM Debug] JSON parsed successfully: say='{resp.say}', commands count={resp.commands?.Length ?? 0}");
             }
             catch (Exception e)
             {
                 LogOut($"[LLM] JSON parse error: {e.Message}\nraw={respJson}");
-                Debug.LogError($"[LLM Debug] Parse exception: {e.StackTrace}"); // Debug: 异常栈
+                Debug.LogError($"[LLM Debug] Parse exception: {e.StackTrace}");
                 yield break;
             }
 
@@ -132,7 +129,6 @@ public class LLMManagerHttp : MonoBehaviour
 
     string GetCurrentDroneName()
     {
-        // 依赖你 SwitchView 暴露的当前目标
         var t = switchView.CurrentDroneTarget;
         if (!t) return "";
 
@@ -149,7 +145,7 @@ public class LLMManagerHttp : MonoBehaviour
         }
 
         string current = GetCurrentDroneName();
-        Debug.Log($"[LLM Debug] Executing for current drone: {current}"); // Debug: 当前无人机
+        Debug.Log($"[LLM Debug] Executing for current drone: {current}");
 
         foreach (var c in resp.commands)
         {
@@ -158,7 +154,21 @@ public class LLMManagerHttp : MonoBehaviour
 
             string type = c.type.Trim().ToLowerInvariant();
 
-            Debug.Log($"[LLM Debug] Processing command: type={type}, drone={c.drone ?? "null"}, route={c.route ?? "null"}, speed={c.speed}"); // Debug: 每个命令详情
+            Debug.Log($"[LLM Debug] Processing command: type={type}, drone={c.drone ?? "null"}, route={c.route ?? "null"}, speed={c.speed}");
+
+            // ==================== 新增：记录到 Logger ====================
+            if (Logger.Instance != null)
+            {
+                Logger.Instance.RecordFrame(
+                    current,                    // 当前无人机名称
+                    new double3(0, 0, 0),       // 位置（这里暂时用0，后面我们会从其他地方补充实时位置）
+                    0f,                         // 速度（这里暂时0）
+                    "",                         // stopReason
+                    type + (string.IsNullOrEmpty(c.route) ? "" : " → " + c.route),  // 当前执行的命令
+                    false                       // 是否碰撞
+                );
+            }
+            // ============================================================
 
             // ===== 全体命令（不需要 drone 字段）=====
             if (type == "pause_all")

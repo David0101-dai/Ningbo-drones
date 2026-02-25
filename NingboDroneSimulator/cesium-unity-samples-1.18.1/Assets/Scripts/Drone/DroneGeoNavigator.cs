@@ -42,9 +42,9 @@ public class DroneGeoNavigator : MonoBehaviour
     public float emergencyStopDistance = 3f;
 
     [Header("=== 调试 ===")]
-    public bool showProgressLogs = true;
-    public bool showPathGizmos = true;
-    public bool showMovementLogs = false; // ✅ 新增：移动日志
+    public bool showProgressLogs = false;     // ← 改成 false
+    public bool showPathGizmos = true;        // 这个可以保留（Gizmos 只在 Scene 视图显示）
+    public bool showMovementLogs = false;     // ← 改成 false
 
     [Header("=== 可视化设置 ===")]
     public Color pathGizmoColor = Color.cyan;
@@ -74,6 +74,10 @@ public class DroneGeoNavigator : MonoBehaviour
     private StopReason _stopReasons = StopReason.None;
 
     private string _logPrefix;
+    // 回放相关（后续可以扩展成真正的回放模式，现在先用来标记是否在回放中，避免日志记录）
+    private bool isInReplayMode = false;
+    private double3 replayTargetLLH;
+    
     
     #endregion
 
@@ -86,7 +90,8 @@ public class DroneGeoNavigator : MonoBehaviour
 
         if (before != _stopReasons)
         {
-            Debug.Log($"{_logPrefix} StopReasons: {before} -> {_stopReasons}");
+            if (showProgressLogs)
+                Debug.Log($"{_logPrefix} StopReasons: {before} -> {_stopReasons}");
         }
     }
 
@@ -218,7 +223,10 @@ public class DroneGeoNavigator : MonoBehaviour
             enabled = false; return;
         }
 
-        Debug.Log($"{_logPrefix} 已加载{llh.Count}个航点");
+
+        if (showProgressLogs)
+            Debug.Log($"{_logPrefix} 已加载{llh.Count}个航点");
+        
         var densified = DensifyLlhLinear(llh, (double)densifyStepMeters);
         _pathLLH.Clear();
         _pathLLH.AddRange(densified);
@@ -228,11 +236,23 @@ public class DroneGeoNavigator : MonoBehaviour
         _hasFwd = false;
 
         anchor.longitudeLatitudeHeight = _pathLLH[0];
-        Debug.Log($"{_logPrefix} 初始化完成，起点: {_pathLLH[0]}");
+        if (showProgressLogs)
+            Debug.Log($"{_logPrefix} 初始化完成，起点: {_pathLLH[0]}");
     }
 
     void LateUpdate()
     {
+        // 【最优先】回放模式 - 完全接管位置
+        if (isInReplayMode)
+        {
+            if (anchor != null)
+                anchor.longitudeLatitudeHeight = replayTargetLLH;
+            
+            // 回放时可以选择是否保持朝向（建议关闭，避免冲突）
+            // transform.rotation = ... 可以暂时注释掉
+            return;
+        }
+
         // ===== 停止原因检查（最优先）=====
         if (_stopReasons != StopReason.None)
         {
@@ -248,7 +268,7 @@ public class DroneGeoNavigator : MonoBehaviour
             
             if (_startupTimer < startupDelay)
             {
-                if (Time.frameCount % 30 == 0)
+                if (Time.frameCount % 30 == 0 && showProgressLogs) // 每30帧输出一次
                 {
                     Debug.Log($"{_logPrefix} 等待场景加载... {startupDelay - _startupTimer:F1}秒");
                 }
@@ -256,7 +276,8 @@ public class DroneGeoNavigator : MonoBehaviour
             }
             
             _isStarted = true;
-            Debug.Log($"{_logPrefix} ✈️ 开始飞行！");
+            if (showProgressLogs)
+                Debug.Log($"{_logPrefix} ✈️ 开始飞行！");
         }
 
         // ===== 路径完成检查 =====
@@ -291,7 +312,8 @@ public class DroneGeoNavigator : MonoBehaviour
                 {
                     //_emergencyStopped = true;
                     //_externalEmergencyStop = true;
-                    Debug.LogWarning($"{_logPrefix}:障碍物内部穿行！！！！");
+                    if (showProgressLogs)
+                        Debug.LogWarning($"{_logPrefix}:障碍物内部穿行！！！！");
                 }
                 // ✅ 已经停止的情况下，不重复设置
             }
@@ -394,6 +416,19 @@ public class DroneGeoNavigator : MonoBehaviour
                 Debug.Log($"{_logPrefix} 进度: {progress:F1}% (段 {_segmentIndex}/{_pathLLH.Count - 1})");
             }
         }
+
+                // ===== 记录日志 =====
+        if (Logger.Instance != null)
+        {
+            Logger.Instance.RecordFrame(
+                gameObject.name,
+                currentLLH,
+                (float)cruiseSpeed,
+                _stopReasons.ToString(),
+                "",           // 当前 LLM 命令（后面补充）
+                false         // 是否碰撞（后面补充）
+            );
+        }
     }
 
     public Vector3 LLHToUnity(double3 llh)
@@ -436,6 +471,19 @@ public class DroneGeoNavigator : MonoBehaviour
     public int GetTotalSegments() => _pathLLH.Count - 1;
     public float GetProgress() => _pathLLH.Count < 2 ? 0f : (float)_segmentIndex / (_pathLLH.Count - 1) * 100f;
     public List<double3> GetPath() => _pathLLH;
+
+        // ReplayManager 调用此方法来强制设置位置
+    public void SetReplayPosition(double3 targetLLH)
+    {
+        isInReplayMode = true;
+        replayTargetLLH = targetLLH;
+    }
+
+    // 停止回放模式
+    public void ExitReplayMode()
+    {
+        isInReplayMode = false;
+    }
 
 #if UNITY_EDITOR
     void OnDrawGizmos()
