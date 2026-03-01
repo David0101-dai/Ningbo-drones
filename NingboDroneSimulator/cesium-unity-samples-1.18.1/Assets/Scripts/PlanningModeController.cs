@@ -2,24 +2,29 @@ using UnityEngine;
 
 public class PlanningModeController : MonoBehaviour
 {
-    public DroneFleetController fleet;
+    public DroneCommandCenter commandCenter;
     public SwitchView switchView;
     public MapPickController picker;
 
     [Header("Exit behavior")]
     public bool resumeAllOnExit = false;
 
+    public bool IsInPlanningMode { get; private set; }
+
     void Awake()
     {
-        if (!fleet) fleet = FindObjectOfType<DroneFleetController>();
+        if (!commandCenter) commandCenter = FindObjectOfType<DroneCommandCenter>();
         if (!switchView) switchView = FindObjectOfType<SwitchView>();
         if (!picker) picker = FindObjectOfType<MapPickController>();
     }
 
     public void EnterPlanningMode()
     {
-        fleet?.PauseAll(true);
-        switchView?.SetTopDown();     // 需要你在 SwitchView 加 public wrapper
+        if (IsInPlanningMode) return;
+        IsInPlanningMode = true;
+
+        commandCenter?.PauseAll(true);
+        switchView?.SetTopDown();
         if (picker) picker.EnablePicking(true);
 
         Debug.Log("[PlanningMode] Enter");
@@ -27,13 +32,14 @@ public class PlanningModeController : MonoBehaviour
 
     public void ExitPlanningMode()
     {
-        if (picker) picker.EnablePicking(false);
+        if (!IsInPlanningMode) return;
+        IsInPlanningMode = false;
 
-        // 退出时回到侧视/追踪（你也可以换 Rear）
+        if (picker) picker.EnablePicking(false);
         switchView?.SetSide();
 
         if (resumeAllOnExit)
-            fleet?.PauseAll(false);
+            commandCenter?.PauseAll(false);
 
         Debug.Log("[PlanningMode] Exit");
     }

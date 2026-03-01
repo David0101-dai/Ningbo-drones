@@ -14,14 +14,14 @@ public class LLMManagerHttp : MonoBehaviour
     public DroneCommandCenter commandCenter;
     public SwitchView switchView;
 
-    [Header("Fleet (for pause_all/resume_all)")]
-    public DroneFleetController fleet;
-
     [Header("Gateway URL")]
     public string gatewayUrl = "http://127.0.0.1:8000/command";
 
     [Header("Debug UI output (optional)")]
     public TMPro.TMP_Text outputText;
+
+    [Header("Scene State")]
+    public SceneStateProvider sceneStateProvider;
 
     [Serializable]
     class CommandRequest
@@ -29,6 +29,7 @@ public class LLMManagerHttp : MonoBehaviour
         public string text;
         public string current_drone;
         public string[] routes;
+        public string scene_state;
     }
 
     [Serializable]
@@ -45,13 +46,16 @@ public class LLMManagerHttp : MonoBehaviour
         public string drone;
         public string route;
         public double speed;
+        public double longitude;
+        public double latitude;
+        public double height;
     }
 
     void Awake()
     {
         if (!commandCenter) commandCenter = FindObjectOfType<DroneCommandCenter>();
         if (!switchView) switchView = FindObjectOfType<SwitchView>();
-        if (!fleet) fleet = FindObjectOfType<DroneFleetController>();
+        if (!sceneStateProvider) sceneStateProvider = FindObjectOfType<SceneStateProvider>();
     }
 
     public void SendUserText(string text)
@@ -69,13 +73,19 @@ public class LLMManagerHttp : MonoBehaviour
         }
 
         string currentDroneName = GetCurrentDroneName();
-        string[] routes = new[] { "Waypoints_A", "Waypoints_B", "Waypoints_C", "Waypoints_Runtime" };
+        string[] routes = commandCenter != null
+            ? commandCenter.GetAvailableRoutes().ToArray()
+            : new string[0];
+        string sceneState = sceneStateProvider != null
+            ? sceneStateProvider.GetStateJson()
+            : "";
 
         var reqObj = new CommandRequest
         {
             text = userText,
             current_drone = currentDroneName,
-            routes = routes
+            routes = routes,
+            scene_state = sceneState
         };
 
         string json = JsonUtility.ToJson(reqObj);
@@ -136,86 +146,42 @@ public class LLMManagerHttp : MonoBehaviour
         return info ? info.gameObject.name : "";
     }
 
-    void Execute(LlmResponse resp)
+       void Execute(LlmResponse resp)
     {
         if (resp.commands == null || resp.commands.Length == 0)
         {
-            Debug.LogWarning("[LLM Debug] No commands in response");
+            Debug.Log("[LLM] No commands in response");
             return;
         }
 
-        string current = GetCurrentDroneName();
-        Debug.Log($"[LLM Debug] Executing for current drone: {current}");
+        string currentDrone = GetCurrentDroneName();
 
-        foreach (var c in resp.commands)
+        // Convert LlmCommand[] to DroneCommandCenter.DroneCommand[]
+        var cmds = new DroneCommandCenter.DroneCommand[resp.commands.Length];
+        for (int i = 0; i < resp.commands.Length; i++)
         {
-            if (c == null || string.IsNullOrEmpty(c.type))
-                continue;
-
-            string type = c.type.Trim().ToLowerInvariant();
-
-            Debug.Log($"[LLM Debug] Processing command: type={type}, drone={c.drone ?? "null"}, route={c.route ?? "null"}, speed={c.speed}");
-
-            // ==================== 新增：记录到 Logger ====================
-            if (Logger.Instance != null)
+            var c = resp.commands[i];
+            cmds[i] = new DroneCommandCenter.DroneCommand
             {
-                Logger.Instance.RecordFrame(
-                    current,                    // 当前无人机名称
-                    new double3(0, 0, 0),       // 位置（这里暂时用0，后面我们会从其他地方补充实时位置）
-                    0f,                         // 速度（这里暂时0）
-                    "",                         // stopReason
-                    type + (string.IsNullOrEmpty(c.route) ? "" : " → " + c.route),  // 当前执行的命令
-                    false                       // 是否碰撞
-                );
-            }
-            // ============================================================
+                type = c.type,
+                drone = c.drone,
+                route = c.route,
+                speed = c.speed
+            };
+        }
 
-            // ===== 全体命令（不需要 drone 字段）=====
-            if (type == "pause_all")
-            {
-                if (fleet) fleet.PauseAll(true);
-                else LogOut("[LLM] pause_all failed: DroneFleetController not found.");
-                continue;
-            }
+        // Execute all commands through CommandCenter
+        string results = commandCenter.ExecuteCommands(cmds, currentDrone);
+        Debug.Log($"[LLM] Execution results:\\n{results}");
 
-            if (type == "resume_all")
-            {
-                if (fleet) fleet.PauseAll(false);
-                else LogOut("[LLM] resume_all failed: DroneFleetController not found.");
-                continue;
-            }
-
-            // ===== 单机命令：默认控制 current =====
-            string drone = (string.IsNullOrEmpty(c.drone) || c.drone == "current") ? current : c.drone;
-
-            if (string.IsNullOrEmpty(drone))
-            {
-                LogOut($"[LLM] Skip '{type}': current drone is empty.");
-                continue;
-            }
-
-            switch (type)
-            {
-                case "pause":
-                    commandCenter.Pause(drone, true);
-                    break;
-
-                case "resume":
-                    commandCenter.Pause(drone, false);
-                    break;
-
-                case "set_speed":
-                    commandCenter.SetSpeed(drone, c.speed);
-                    break;
-
-                case "select_route":
-                    commandCenter.SelectRoute(drone, c.route);
-                    break;
-
-                default:
-                    LogOut($"[LLM] Unknown command type: {type}");
-                    break;
-            }
+        // Show results in output (append to say text)
+        if (!string.IsNullOrEmpty(results) && outputText)
+        {
+            string display = resp.say;
+            if (!string.IsNullOrEmpty(display))
+                display += "\\n---\\n";
+            display += results;
+            outputText.text = display;
         }
     }
 

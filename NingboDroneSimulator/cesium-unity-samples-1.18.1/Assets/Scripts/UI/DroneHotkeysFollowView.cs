@@ -23,11 +23,21 @@ public class DroneHotkeysFollowView : MonoBehaviour
     {
         if (!switchView) switchView = FindObjectOfType<SwitchView>();
         if (!commandCenter) commandCenter = FindObjectOfType<DroneCommandCenter>();
-        if (commandCenter) commandCenter.RefreshRegistry();
+        if (commandCenter) commandCenter.Refresh();
+
     }
 
     void Update()
     {
+            // Skip hotkeys when UI input field is focused
+        if (UnityEngine.EventSystems.EventSystem.current != null &&
+            UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject != null)
+        {
+            var inputField = UnityEngine.EventSystems.EventSystem.current
+                .currentSelectedGameObject.GetComponent<TMPro.TMP_InputField>();
+            if (inputField != null) return;
+        }
+
         if (!switchView || !commandCenter) return;
 
         Transform camTarget = switchView.CurrentDroneTarget;

@@ -272,7 +272,7 @@ MonoBehaviour:
   picker: {fileID: 365380049}
   switchView: {fileID: 1849986139}
   planningController: {fileID: 363744272}
-  fleet: {fileID: 585341929}
+  commandCenter: {fileID: 1583206587}
   applyRouteController: {fileID: 2146975844}
   llm: {fileID: 896964162}
   enterPlanningName: EnterPlanningButton
@@ -1742,7 +1742,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c4584ffd0909e294bbe89fc9efe60bfe, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  fleet: {fileID: 585341929}
+  commandCenter: {fileID: 0}
   switchView: {fileID: 1849986139}
   picker: {fileID: 365380049}
   resumeAllOnExit: 0
@@ -2642,6 +2642,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 506306591}
+  - component: {fileID: 506306592}
   m_Layer: 0
   m_Name: SceneStateProvider
   m_TagString: Untagged
@@ -2664,6 +2665,20 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1441819706}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &506306592
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 506306590}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef2721b422072e842ac9c53b16c7b1f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  commandCenter: {fileID: 1583206587}
+  cityName: Ningbo
 --- !u!1 &513177351
 GameObject:
   m_ObjectHideFlags: 0
@@ -3075,51 +3090,6 @@ MonoBehaviour:
         m_Calls: []
   m_LegacyBlendHint: 0
   m_ComponentOwner: {fileID: 1724894763}
---- !u!1 &585341927
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 585341928}
-  - component: {fileID: 585341929}
-  m_Layer: 0
-  m_Name: DroneFleetController
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &585341928
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 585341927}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1441819706}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &585341929
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 585341927}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fd9f0c54e49cf03438a890c566d4d90f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  autoRefreshOnEnable: 1
 --- !u!1 &589758843
 GameObject:
   m_ObjectHideFlags: 0
@@ -5663,9 +5633,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   commandCenter: {fileID: 1583206587}
   switchView: {fileID: 1849986139}
-  fleet: {fileID: 585341929}
   gatewayUrl: http://127.0.0.1:8000/command
   outputText: {fileID: 1670087240}
+  sceneStateProvider: {fileID: 506306592}
 --- !u!1 &899676193
 GameObject:
   m_ObjectHideFlags: 0
@@ -9219,7 +9189,6 @@ Transform:
   - {fileID: 1583206586}
   - {fileID: 896964161}
   - {fileID: 506306591}
-  - {fileID: 585341928}
   - {fileID: 363744271}
   - {fileID: 365380048}
   - {fileID: 17753573}
@@ -10340,6 +10309,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   waypointsRoot: {fileID: 1859213292}
+  autoRefreshOnEnable: 1
+  routeBuilder: {fileID: 675031199}
+  runtimeWaypointsParent: {fileID: 684568681}
 --- !u!1 &1604494396
 GameObject:
   m_ObjectHideFlags: 0

@@ -78,6 +78,15 @@ public class SwitchView : MonoBehaviour
 
     void Update()
     {
+            // Skip hotkeys when UI input field is focused
+        if (UnityEngine.EventSystems.EventSystem.current != null &&
+            UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject != null)
+        {
+            var inputField = UnityEngine.EventSystems.EventSystem.current
+                .currentSelectedGameObject.GetComponent<TMPro.TMP_InputField>();
+            if (inputField != null) return;
+        }
+
         // --- 数字键：切换视角模式 ---
         if (Input.GetKeyDown(sideKey)) ApplyView(View.Side);
         if (Input.GetKeyDown(rearKey)) ApplyView(View.Rear);

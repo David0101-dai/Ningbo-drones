@@ -62,7 +62,7 @@ public class UIPanelManager : MonoBehaviour
     [SerializeField] private MapPickController picker;
     [SerializeField] private SwitchView switchView;
     [SerializeField] private PlanningModeController planningController;
-    [SerializeField] private DroneFleetController fleet;
+    [SerializeField] private DroneCommandCenter commandCenter;
     [SerializeField] private ApplyRuntimeRouteController applyRouteController;
     [SerializeField] private LLMManagerHttp llm;
 
@@ -107,7 +107,7 @@ public class UIPanelManager : MonoBehaviour
         // ---------- 自动查找 Controllers ----------
         if (!planningController) planningController = FindObjectOfType<PlanningModeController>();
         if (!picker) picker = FindObjectOfType<MapPickController>();
-        if (!fleet) fleet = FindObjectOfType<DroneFleetController>();
+        if (!commandCenter) commandCenter = FindObjectOfType<DroneCommandCenter>();
         if (!switchView) switchView = FindObjectOfType<SwitchView>();
         if (!applyRouteController) applyRouteController = FindObjectOfType<ApplyRuntimeRouteController>();
         if (!llm) llm = FindObjectOfType<LLMManagerHttp>();
@@ -192,8 +192,8 @@ public class UIPanelManager : MonoBehaviour
     private void BindDefaultEvents()
     {
         BindButton(sendButton, OnSend);
-        BindButton(pauseAllButton, () => fleet?.PauseAll(true));
-        BindButton(resumeAllButton, () => fleet?.PauseAll(false));
+        BindButton(pauseAllButton, () => commandCenter?.PauseAll(true));
+        BindButton(resumeAllButton, () => commandCenter?.PauseAll(false));
         BindButton(enterPlanningButton, EnterPlanning);
         BindButton(enterReplayButton, EnterReplay);
         BindButton(saveLogButton, OnSaveLog);
@@ -201,7 +201,7 @@ public class UIPanelManager : MonoBehaviour
         if (pauseToggleOptional)
         {
             pauseToggleOptional.onValueChanged.RemoveAllListeners();
-            pauseToggleOptional.onValueChanged.AddListener(v => fleet?.PauseAll(v));
+            pauseToggleOptional.onValueChanged.AddListener(v => commandCenter?.PauseAll(v));
         }
     }
 
@@ -609,6 +609,9 @@ public class UIPanelManager : MonoBehaviour
         if (string.IsNullOrWhiteSpace(text)) return;
         llm.SendUserText(text);
         Debug.Log($"[UI] Input: {text}");
+
+        inputField.text = "";
+        inputField.ActivateInputField();
     }
 
     private void OnSaveLog()

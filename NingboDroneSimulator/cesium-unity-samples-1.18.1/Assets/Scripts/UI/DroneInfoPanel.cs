@@ -3,59 +3,70 @@ using TMPro;
 
 public class DroneInfoPanel : MonoBehaviour
 {
-    [Header("UI 组件")]
+    [Header("UI Components")]
     public TMP_Text nameText;
     public TMP_Text speedText;
+    public TMP_Text statusText;
 
-    [Header("跟随设置")]
+    [Header("Follow Settings")]
     public Transform targetDrone;
-    public Vector3 offset = new Vector3(1.5f, 2.8f, 0.5f);  // X 向右偏移，避免遮挡；Z 轻微前移
+    public Vector3 offset = new Vector3(1.5f, 2.8f, 0.5f);
 
-    [Header("防抖动参数")]
-    public float smoothSpeed = 8f;          // 位置平滑速度
-    public float rotationSmooth = 10f;      // 旋转平滑速度
+    [Header("Smoothing")]
+    public float smoothSpeed = 8f;
+    public float rotationSmooth = 10f;
 
     private Canvas canvas;
     public bool isVisible = false;
+    private Camera _cachedCamera;
 
     void Awake()
     {
         canvas = GetComponent<Canvas>();
         if (canvas == null)
         {
-            Debug.LogError("必须挂在 Canvas 上！");
+            Debug.LogError("DroneInfoPanel must be on a Canvas!");
             return;
         }
         canvas.enabled = false;
+        _cachedCamera = Camera.main;
     }
 
     void LateUpdate()
     {
         if (targetDrone == null || !isVisible) return;
+        if (_cachedCamera == null) _cachedCamera = Camera.main;
+        if (_cachedCamera == null) return;
 
-        // 平滑跟随位置
+        // Smooth follow position
         Vector3 targetPos = targetDrone.position + offset;
         transform.position = Vector3.Lerp(transform.position, targetPos, Time.deltaTime * smoothSpeed);
-        // 距离自适应缩放（近大远小）
-        float distance = Vector3.Distance(transform.position, Camera.main.transform.position);
-        float targetScale = Mathf.Lerp(0.008f, 0.55f, Mathf.InverseLerp(5f, 50f, distance)); // 近5米时0.025，远50米时0.008
-        transform.localScale = Vector3.Lerp(transform.localScale, new Vector3(targetScale, targetScale, targetScale), Time.deltaTime * 5f);
 
-        // 判断当前相机是否为 TopDown（通过角度或标签判断）
-        bool isTopView = Vector3.Dot(Camera.main.transform.forward, Vector3.down) > 0.9f;  // 向下看 > 0.9 认为俯视
+        // Distance-adaptive scale
+        float distance = Vector3.Distance(transform.position, _cachedCamera.transform.position);
+        float targetScale = Mathf.Lerp(0.008f, 0.55f, Mathf.InverseLerp(5f, 50f, distance));
+        transform.localScale = Vector3.Lerp(
+            transform.localScale,
+            new Vector3(targetScale, targetScale, targetScale),
+            Time.deltaTime * 5f
+        );
+
+        // Top-down vs normal view
+        bool isTopView = Vector3.Dot(_cachedCamera.transform.forward, Vector3.down) > 0.9f;
 
         if (isTopView)
         {
-            // 俯视时强制水平（X-Z 平面）
-            transform.rotation = Quaternion.Euler(90f, 0f, 0f);  // 让面板平躺朝上
+            transform.rotation = Quaternion.Euler(90f, 0f, 0f);
         }
         else
         {
-            // 正常视角：面向相机（水平旋转）
-            Vector3 direction = transform.position - Camera.main.transform.position;
+            Vector3 direction = transform.position - _cachedCamera.transform.position;
             direction.y = 0;
-            Quaternion targetRotation = Quaternion.LookRotation(direction);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * rotationSmooth);
+            if (direction.sqrMagnitude > 0.001f)
+            {
+                Quaternion targetRotation = Quaternion.LookRotation(direction);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * rotationSmooth);
+            }
         }
     }
 
@@ -63,6 +74,11 @@ public class DroneInfoPanel : MonoBehaviour
     {
         isVisible = !isVisible;
         canvas.enabled = isVisible;
+    }
+
+    public void SetName(string droneName)
+    {
+        if (nameText) nameText.text = droneName;
     }
 
     public void UpdateSpeed(float speedMps)
@@ -74,8 +90,8 @@ public class DroneInfoPanel : MonoBehaviour
         }
     }
 
-    public void SetName(string droneName)
+    public void UpdateStatus(string state)
     {
-        if (nameText) nameText.text = droneName;
+        if (statusText) statusText.text = state;
     }
 }

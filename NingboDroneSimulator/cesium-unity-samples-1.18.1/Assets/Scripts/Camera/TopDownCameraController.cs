@@ -25,8 +25,16 @@ public class TopDownCameraController : MonoBehaviour
 
     void Update()
     {
-        // 只在 Top 视角激活时工作（通过 SwitchView 的优先级判断）
-        if (vcam.Priority <= 10) return;  // inactivePriority = 10，假设
+        if (vcam.Priority <= 10) return;
+
+        // Skip when UI input field is focused
+        if (UnityEngine.EventSystems.EventSystem.current != null &&
+            UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject != null)
+        {
+            var inputField = UnityEngine.EventSystems.EventSystem.current
+                .currentSelectedGameObject.GetComponent<TMPro.TMP_InputField>();
+            if (inputField != null) return;
+        }
 
         // WASD 移动
         float speed = moveSpeed * (Input.GetKey(KeyCode.LeftShift) ? fastMultiplier : 1f);
