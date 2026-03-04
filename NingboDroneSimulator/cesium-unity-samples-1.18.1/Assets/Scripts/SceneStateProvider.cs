@@ -85,7 +85,15 @@ public class SceneStateProvider : MonoBehaviour
         // Drone states
         if (commandCenter != null)
         {
-            var snapshots = commandCenter.GetFleetSnapshot();
+            var allSnapshots = commandCenter.GetFleetSnapshot();
+            var seen = new HashSet<string>();
+            var snapshots = new List<DroneInfo.Snapshot>();
+            foreach (var s in allSnapshots)
+            {
+                if (seen.Add(s.name))
+                    snapshots.Add(s);
+            }
+
             int flying = 0, idle = 0, paused = 0;
 
             foreach (var snap in snapshots)

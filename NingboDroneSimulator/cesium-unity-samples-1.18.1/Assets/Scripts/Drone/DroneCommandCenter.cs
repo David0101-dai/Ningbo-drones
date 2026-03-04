@@ -58,15 +58,29 @@ public class DroneCommandCenter : MonoBehaviour
         {
             if (info == null) continue;
 
-            string droneName = info.gameObject.name;
+            string objName = info.gameObject.name;
+            string displayName = info.GetName();
 
-            _infoByName[droneName] = info;
-
+            // Register by gameObject.name
+            _infoByName[objName] = info;
             if (info.navigator != null)
-                _navByName[droneName] = info.navigator;
+                _navByName[objName] = info.navigator;
+
+            // Also register by displayName (if different)
+            if (!string.IsNullOrEmpty(displayName) && displayName != objName)
+            {
+                _infoByName[displayName] = info;
+                if (info.navigator != null)
+                    _navByName[displayName] = info.navigator;
+            }
         }
 
-        Debug.Log($"[CommandCenter] Registry refreshed: {_infoByName.Count} drones");
+
+        // Count unique physical drones
+        var uniqueDrones = new HashSet<DroneInfo>(_infoByName.Values);
+        Debug.Log($"[CommandCenter] Registry refreshed: {uniqueDrones.Count} drones ({_infoByName.Count} name entries)");
+
+
     }
 
     // ================================================================
@@ -143,11 +157,12 @@ public class DroneCommandCenter : MonoBehaviour
     /// </summary>
     public List<DroneInfo.Snapshot> GetFleetSnapshot()
     {
-        var snapshots = new List<DroneInfo.Snapshot>(_infoByName.Count);
+        var seen = new HashSet<DroneInfo>();
+        var snapshots = new List<DroneInfo.Snapshot>();
 
         foreach (var kvp in _infoByName)
         {
-            if (kvp.Value != null)
+            if (kvp.Value != null && seen.Add(kvp.Value))
                 snapshots.Add(kvp.Value.GetSnapshot());
         }
 
