@@ -181,6 +181,49 @@ public class DroneGeoNavigator : MonoBehaviour
         return ok;
     }
 
+        /// <summary>
+    /// Directly inject a pre-built LLH path into the navigator.
+    /// The first point should be the drone's current position.
+    /// This bypasses waypoint reading and avoids frame-delay issues.
+    /// </summary>
+    public bool InjectPath(List<double3> llhPath, bool startNow = true)
+    {
+        if (llhPath == null || llhPath.Count < 2)
+        {
+            if (showProgressLogs)
+                Debug.LogWarning($"{_logPrefix} InjectPath failed: need at least 2 points");
+            return false;
+        }
+
+        StopReason before = _stopReasons;
+        SetStop(StopReason.System, true);
+
+        try
+        {
+            // Densify the path
+            var densified = DensifyLlhLinear(llhPath, (double)densifyStepMeters);
+
+            _pathLLH.Clear();
+            _pathLLH.AddRange(densified);
+
+            // Start from segment 0, but the first point IS the drone's current position
+            // so there's no "teleport"
+            _segmentIndex = 0;
+            _tOnSegment = 0.0;
+            _hasFwd = false;
+
+            if (showProgressLogs)
+                Debug.Log($"{_logPrefix} InjectPath ok: {_pathLLH.Count} points");
+
+            return true;
+        }
+        finally
+        {
+            _stopReasons = before;
+            if (startNow) ForceStartNow();
+        }
+    }
+
     void Reset()
     {
         anchor = GetComponent<CesiumGlobeAnchor>();
@@ -488,13 +531,60 @@ public class DroneGeoNavigator : MonoBehaviour
 #if UNITY_EDITOR
     void OnDrawGizmos()
     {
-        if (!showPathGizmos || !georeference || !waypointsParent) return;
+        if (!showPathGizmos || !georeference) return;
+
+        // ====== Runtime: draw from _pathLLH (injected or loaded) ======
+        if (Application.isPlaying && _pathLLH.Count >= 2)
+        {
+            // Already-traveled path (dimmer)
+            Gizmos.color = new Color(pathGizmoColor.r, pathGizmoColor.g, pathGizmoColor.b, 0.2f);
+            for (int i = 0; i < Mathf.Min(_segmentIndex, _pathLLH.Count - 1); i++)
+            {
+                Vector3 a = LLHToUnity(_pathLLH[i]);
+                Vector3 b = LLHToUnity(_pathLLH[i + 1]);
+                Gizmos.DrawLine(a, b);
+            }
+
+            // Remaining path (bright)
+            Gizmos.color = pathGizmoColor;
+            for (int i = Mathf.Max(0, _segmentIndex); i < _pathLLH.Count - 1; i++)
+            {
+                Vector3 a = LLHToUnity(_pathLLH[i]);
+                Vector3 b = LLHToUnity(_pathLLH[i + 1]);
+                Gizmos.DrawLine(a, b);
+            }
+
+            // Endpoint marker
+            Gizmos.color = Color.red;
+            Vector3 endPos = LLHToUnity(_pathLLH[_pathLLH.Count - 1]);
+            Gizmos.DrawWireSphere(endPos, 3f);
+
+            // Current position marker
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(transform.position, 3f);
+
+            // Forward direction
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawRay(transform.position, transform.forward * 15f);
+
+            // Next target
+            if (_segmentIndex < _pathLLH.Count - 1)
+            {
+                Vector3 targetPos = LLHToUnity(_pathLLH[_segmentIndex + 1]);
+                Gizmos.color = Color.magenta;
+                Gizmos.DrawLine(transform.position, targetPos);
+            }
+
+            return; // Skip editor-only waypoint drawing when playing
+        }
+
+        // ====== Editor (not playing): draw from waypointsParent ======
+        if (waypointsParent == null) return;
 
         var anchors = waypointsParent.GetComponentsInChildren<CesiumGlobeAnchor>(false);
         if (sortWaypointsByName)
             System.Array.Sort(anchors, (a, b) => string.Compare(a.name, b.name, System.StringComparison.Ordinal));
 
-            // 主路径线段用可配置颜色
         Gizmos.color = pathGizmoColor;
         for (int i = 0; i < anchors.Length - 1; i++)
         {
@@ -509,23 +599,52 @@ public class DroneGeoNavigator : MonoBehaviour
             Vector3 pos = LLHToUnity(anc.longitudeLatitudeHeight);
             Gizmos.DrawWireSphere(pos, 2f);
         }
+    }
 
-        if (Application.isPlaying && _isStarted && _pathLLH.Count > 0)
+        // ====== Game View path visualization using GL ======
+    private Material _lineMaterial;
+
+    private void EnsureLineMaterial()
+    {
+        if (_lineMaterial != null) return;
+        Shader shader = Shader.Find("Hidden/Internal-Colored");
+        if (shader == null) return;
+        _lineMaterial = new Material(shader);
+        _lineMaterial.hideFlags = HideFlags.HideAndDontSave;
+        _lineMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        _lineMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        _lineMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
+        _lineMaterial.SetInt("_ZWrite", 0);
+        _lineMaterial.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
+    }
+
+    void OnRenderObject()
+    {
+        if (!showPathGizmos || !Application.isPlaying) return;
+        if (_pathLLH.Count < 2) return;
+
+        EnsureLineMaterial();
+        if (_lineMaterial == null) return;
+
+        _lineMaterial.SetPass(0);
+
+        // Draw remaining path
+        GL.PushMatrix();
+        GL.MultMatrix(Matrix4x4.identity);
+        GL.Begin(GL.LINES);
+
+        // Remaining path in cyan
+        GL.Color(new Color(pathGizmoColor.r, pathGizmoColor.g, pathGizmoColor.b, 0.8f));
+        for (int i = Mathf.Max(0, _segmentIndex); i < _pathLLH.Count - 1; i++)
         {
-            Gizmos.color = Color.green;
-            Gizmos.DrawWireSphere(transform.position, 3f);
-            
-            Gizmos.color = Color.red;
-            Gizmos.DrawRay(transform.position, transform.forward * 10f);
-            
-            if (_segmentIndex < _pathLLH.Count - 1)
-            {
-                Vector3 targetPos = LLHToUnity(_pathLLH[_segmentIndex + 1]);
-                Gizmos.color = Color.magenta;
-                Gizmos.DrawLine(transform.position, targetPos);
-                Gizmos.DrawWireSphere(targetPos, 2f);
-            }
+            Vector3 a = LLHToUnity(_pathLLH[i]);
+            Vector3 b = LLHToUnity(_pathLLH[i + 1]);
+            GL.Vertex3(a.x, a.y, a.z);
+            GL.Vertex3(b.x, b.y, b.z);
         }
+
+        GL.End();
+        GL.PopMatrix();
     }
 #endif
 }

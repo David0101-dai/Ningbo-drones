@@ -87,24 +87,24 @@ MonoBehaviour:
   _detectTransformChanges: 0
   _localToGlobeFixedMatrix:
     c0:
-      x: -0.852210875998216
-      y: -0.523198454045083
-      z: -0.000022697765668107475
+      x: -0.8522155750084022
+      y: -0.5231908000429626
+      z: -0.000021529123243951343
       w: 0
     c1:
-      x: -0.4537025035639155
-      y: 0.7389909136016176
-      z: 0.4980426366026123
+      x: -0.4536964795963369
+      y: 0.7389970998436936
+      z: 0.4980389450881332
       w: 0
     c2:
-      x: 0.26055836407643596
-      y: -0.42444764965668225
-      z: 0.8671525422961808
+      x: 0.26055348417357405
+      y: -0.4244463136522861
+      z: 0.867154662509518
       w: 0
     c3:
-      x: -2896232.7851225766
-      y: 4717321.628227805
-      z: 3157929.252106923
+      x: -2896233.420945941
+      y: 4717322.663833063
+      z: 3157927.1362499623
       w: 1
   _localToGlobeFixedMatrixIsValid: 1
 --- !u!114 &2178868115032404087
@@ -138,9 +138,9 @@ MonoBehaviour:
     m_Bits: 8
   emergencyStopDistance: 3
   showProgressLogs: 0
-  showPathGizmos: 0
+  showPathGizmos: 1
   showMovementLogs: 0
-  pathGizmoColor: {r: 0, g: 1, b: 1, a: 1}
+  pathGizmoColor: {r: 1, g: 0.03279034, b: 0, a: 1}
 --- !u!114 &1331128659972587919
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -153,21 +153,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 756db28ec13cd3e4dabfbd042920581d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  detectionDistance: 30
-  detectionRadius: 1.5
+  detectionDistance: 15
+  detectionRadius: 0.8
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 8
   forwardRayCount: 5
-  forwardRaySpread: 35
-  gridHalfSizeMeters: 100
-  cellSizeMeters: 3
-  cellCheckRadius: 2
-  minDistanceAfterAvoid: 35
+  forwardRaySpread: 20
+  gridHalfSizeMeters: 60
+  cellSizeMeters: 4
+  cellCheckRadius: 1.5
+  minDistanceAfterAvoid: 50
   logInfo: 0
   drawDebug: 0
-  debugDrawGridSlice: 0
-  debugLogSearchDetails: 0
+  debugDrawGridSlice: 1
+  debugLogSearchDetails: 1
 --- !u!114 &3455872191160576865
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -180,12 +180,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf4c7f6d5dcf5a848999d5281a66e12b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  displayName: AAA
+  displayName: BBB
   uiColor: {r: 0, g: 0.7987421, b: 0.7987421, a: 0.43529412}
   uiAnchor: {fileID: 9040535741330029267}
   navigator: {fileID: 2178868115032404087}
   infoPanelPrefab: {fileID: 6044137641284671409, guid: bcda4c86afb3814439a8d464102d48b2,
     type: 3}
+  missionState: 0
+  currentRouteName: 
 --- !u!65 &5291710196469027569
 BoxCollider:
   m_ObjectHideFlags: 0

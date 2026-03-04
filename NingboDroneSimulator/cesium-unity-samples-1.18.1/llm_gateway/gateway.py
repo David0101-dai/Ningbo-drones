@@ -53,6 +53,25 @@ def try_rule_engine(text: str, routes: List[str]) -> Optional[Dict[str, Any]]:
         sp_kmh = float(speed_match.group(1))
         sp_mps = sp_kmh / 3.6
         return {"say": f"Speed set to {sp_kmh} km/h", "commands": [{"type": "set_speed", "drone": "current", "speed": sp_mps}]}
+    
+    # orders
+    if "test order" in text or "random order" in text:
+        return {"say": "Creating test order", "commands": [{"type": "create_test_order"}]}
+
+    if "order status" in text or "order list" in text:
+        return {"say": "Order status", "commands": [{"type": "order_status"}]}
+
+    if "location status" in text or "locations" in text or "list points" in text:
+        return {"say": "Location status", "commands": [{"type": "location_status"}]}
+
+    if "clear orders" in text:
+        return {"say": "Clearing all orders", "commands": [{"type": "clear_orders"}]}
+
+    if "sample order" in text or "save sample" in text:
+        return {"say": "Saving sample order file", "commands": [{"type": "save_sample_orders"}]}
+
+    if "import orders" in text or "load orders" in text:
+        return {"say": "Importing orders from file", "commands": [{"type": "import_orders"}]}
 
     # route
     for r in routes:
@@ -84,6 +103,13 @@ Available command types:
 8. {"type": "query_drone", "drone": "<name>"} - Query single drone status
 9. {"type": "query_routes"} - List available routes
 10. {"type": "go_to", "drone": "<name>", "longitude": <lon>, "latitude": <lat>, "height": <h>} - Fly to coordinates
+11. {"type": "create_test_order"} - Create a random test delivery order for automatic assignment
+12. {"type": "order_status"} - Show all delivery orders and their status
+13. {"type": "create_order", "route": "pickup_name,delivery_name,description"} - Create order from named locations
+14. {"type": "location_status"} - Show all location points
+15. {"type": "import_orders"} - Import orders from JSON file
+16. {"type": "save_sample_orders"} - Save sample order file for reference
+17. {"type": "clear_orders"} - Clear all orders
 
 Rules:
 - Use "current" as drone name when the user doesn't specify which drone
@@ -91,6 +117,8 @@ Rules:
 - If the user asks a question that doesn't need a command, return empty commands array and answer in "say"
 - Always respond with valid JSON only, no markdown, no explanation outside the JSON
 - Available drone names and routes are provided in the scene state
+- When user asks to create a delivery/test order, use create_test_order
+- When user asks about orders or deliveries, use order_status
 """
 
 def call_llm(user_text: str, scene_state: str, current_drone: str, routes: List[str]) -> Dict[str, Any]:

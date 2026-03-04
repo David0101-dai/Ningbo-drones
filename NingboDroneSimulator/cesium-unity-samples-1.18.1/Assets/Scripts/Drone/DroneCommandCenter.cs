@@ -371,6 +371,42 @@ public class DroneCommandCenter : MonoBehaviour
             case "query_routes":
                 var routes = GetAvailableRoutes();
                 return "Available routes: " + string.Join(", ", routes);
+
+            case "create_test_order":
+                if (OrderManager.Instance == null)
+                    return "Error: OrderManager not found";
+                var testOrder = OrderManager.Instance.CreateTestOrder();
+                return testOrder != null
+                    ? $"Test order {testOrder.orderId} created: {testOrder.description}"
+                    : "Error: Could not create test order (need pickup and delivery points)";
+
+            case "create_order":
+                return ExecuteCreateNamedOrder(cmd);
+
+            case "order_status":
+                if (OrderManager.Instance == null)
+                    return "Error: OrderManager not found";
+                return OrderManager.Instance.GetStatusText();
+
+            case "location_status":
+                if (LocationManager.Instance == null)
+                    return "Error: LocationManager not found";
+                return LocationManager.Instance.GetStatusText();
+
+            case "import_orders":
+                return ExecuteImportOrders(cmd);
+
+            case "save_sample_orders":
+                if (OrderManager.Instance == null)
+                    return "Error: OrderManager not found";
+                string samplePath = OrderManager.Instance.SaveSampleOrderFile();
+                return $"Sample order file saved to: {samplePath}";
+
+            case "clear_orders":
+                if (OrderManager.Instance == null)
+                    return "Error: OrderManager not found";
+                OrderManager.Instance.ClearAllOrders();
+                return "All orders cleared";
         }
 
         // ===== Single drone commands (need drone name) =====
@@ -522,4 +558,52 @@ public class DroneCommandCenter : MonoBehaviour
               (_cachedBuilder.LastUsedFallback ? " [FALLBACK ROUTE]" : "")
             : $"Error: failed to apply route for {droneName}";
     }
+
+        private string ExecuteCreateNamedOrder(DroneCommand cmd)
+    {
+        if (OrderManager.Instance == null)
+            return "Error: OrderManager not found";
+
+        // cmd.route = "pickup_name,delivery_name"
+        if (string.IsNullOrEmpty(cmd.route))
+            return "Error: create_order needs pickup and delivery names (format: pickup_name,delivery_name)";
+
+        var parts = cmd.route.Split(',');
+        if (parts.Length < 2)
+            return "Error: create_order format: pickup_name,delivery_name";
+
+        string pickupName = parts[0].Trim();
+        string deliveryName = parts[1].Trim();
+        string description = parts.Length >= 3 ? parts[2].Trim() : "";
+
+        var order = OrderManager.Instance.CreateOrderByNames(pickupName, deliveryName, description);
+        return order != null
+            ? $"Order {order.orderId} created: {order.description}"
+            : "Error: Could not create order (check location names)";
+    }
+
+    private string ExecuteImportOrders(DroneCommand cmd)
+    {
+        if (OrderManager.Instance == null)
+            return "Error: OrderManager not found";
+
+        string filePath = cmd.route;
+        if (string.IsNullOrEmpty(filePath))
+        {
+            // Try sample_orders.json first, then orders.json
+            string samplePath = System.IO.Path.Combine(Application.persistentDataPath, "sample_orders.json");
+            string ordersPath = System.IO.Path.Combine(Application.persistentDataPath, "orders.json");
+
+            if (System.IO.File.Exists(samplePath))
+                filePath = samplePath;
+            else if (System.IO.File.Exists(ordersPath))
+                filePath = ordersPath;
+            else
+                return $"Error: No order files found in {Application.persistentDataPath}";
+        }
+
+        int count = OrderManager.Instance.ImportOrdersFromFile(filePath);
+        return $"Imported {count} orders from {System.IO.Path.GetFileName(filePath)}";
+    }
+
 }
