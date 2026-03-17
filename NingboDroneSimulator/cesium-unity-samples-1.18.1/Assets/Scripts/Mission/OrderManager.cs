@@ -127,6 +127,29 @@ public class OrderManager : MonoBehaviour
         return order;
     }
 
+        /// <summary>
+    /// Add a pre-built order directly (used by SolomonImporter).
+    /// Does NOT auto-assign; the assignment system will pick it up.
+    /// </summary>
+    public void AddExternalOrder(DeliveryOrder order)
+    {
+        if (order == null) return;
+
+        // Ensure unique ID
+        _orderCounter++;
+        if (_allOrders.Any(o => o.orderId == order.orderId))
+            order.orderId = $"{order.orderId}_{_orderCounter}";
+
+        order.createdTime = Time.time;
+        order.status = DeliveryOrder.OrderStatus.Pending;
+        _allOrders.Add(order);
+
+        if (logAssignments)
+            Debug.Log($"[OrderManager] Added external order: {order}");
+
+        OnOrderCreated?.Invoke(order);
+    }
+
     /// <summary>
     /// Create a random test order from available locations
     /// </summary>
@@ -251,6 +274,22 @@ public class OrderManager : MonoBehaviour
 
     private void TryAssignPendingOrders()
     {
+        // ====== NEW: Skip auto-assignment if VehicleRouter is handling routing ======
+        if (VehicleRouter.Instance != null &&
+            VehicleRouter.Instance.LastSolution != null &&
+            VehicleRouter.Instance.LastSolution.Count > 0)
+        {
+            return; // Let RouteDispatcher handle assignments
+        }
+
+        // Also skip if Solomon data was imported (wait for user to click Solve)
+        if (SolomonImporter.Instance != null &&
+            SolomonImporter.Instance.CurrentDataset != null)
+        {
+            return; // Solomon orders should be routed via Routing tab
+        }
+
+        // ====== Original logic below (for manual orders only) ======
         if (commandCenter == null || routeBuilder == null) return;
 
         var pendingOrders = _allOrders.Where(o => o.status == DeliveryOrder.OrderStatus.Pending).ToList();
@@ -337,6 +376,16 @@ public class OrderManager : MonoBehaviour
     {
         info.OnRouteCompleted -= OnDroneRouteCompleted;
         info.OnRouteCompleted += OnDroneRouteCompleted;
+    }
+
+        /// <summary>
+    /// Unsubscribe a drone (called when drone is removed)
+    /// </summary>
+    public void UnsubscribeDrone(DroneInfo info)
+    {
+        if (info == null) return;
+        info.OnRouteCompleted -= OnDroneRouteCompleted;
+        Debug.Log($"[OrderManager] Unsubscribed drone: {info.GetName()}");
     }
 
     private void OnDroneRouteCompleted(DroneInfo droneInfo)

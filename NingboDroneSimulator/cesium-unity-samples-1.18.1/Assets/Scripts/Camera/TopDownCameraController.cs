@@ -10,7 +10,7 @@ public class TopDownCameraController : MonoBehaviour
     [Header("缩放设置")]
     public float zoomSpeed = 20f;         // 鼠标轮缩放速度
     public float minFOV = 20f;            // 最小 FOV
-    public float maxFOV = 90f;            // 最大 FOV
+    public float maxFOV = 200f;            // 最大 FOV
 
     private CinemachineVirtualCamera vcam;
     private CinemachineOrbitalTransposer orbital;  // 如果是 Orbital 类型

@@ -1,4 +1,4 @@
-// Assets/Scripts/DroneInfo.cs
+// Assets/Scripts/Drone/DroneInfo.cs
 using UnityEngine;
 using Unity.Mathematics;
 using CesiumForUnity;
@@ -18,6 +18,7 @@ public class DroneInfo : MonoBehaviour
     // ================================================================
     [Header("=== Core ===")]
     public DroneGeoNavigator navigator;
+    public DroneSpec spec;            // 新增：无人机规格
 
     [Header("=== Info Panel ===")]
     public GameObject infoPanelPrefab;
@@ -31,27 +32,19 @@ public class DroneInfo : MonoBehaviour
 
     public enum MissionState
     {
-        Idle,       // No active route / reached destination
-        Flying,     // Currently following a route
-        Paused,     // Externally paused
-        Completed   // Just completed a route (will reset to Idle)
+        Idle,
+        Flying,
+        Paused,
+        Charging,     // 新增：充电中
+        Completed
     }
 
     // ================================================================
     //  Events
     // ================================================================
-
-    /// <summary>
-    /// Fired when drone reaches end of its route.
-    /// Parameter: this DroneInfo instance.
-    /// </summary>
     public System.Action<DroneInfo> OnRouteCompleted;
-
-    /// <summary>
-    /// Fired when mission state changes.
-    /// Parameters: (DroneInfo, oldState, newState)
-    /// </summary>
     public System.Action<DroneInfo, MissionState, MissionState> OnMissionStateChanged;
+    public System.Action<DroneInfo> OnLowBattery;    // 新增
 
     // ================================================================
     //  Private
@@ -59,6 +52,7 @@ public class DroneInfo : MonoBehaviour
     private DroneInfoPanel _panel;
     private bool _routeCompletedFired = false;
     private Camera _cachedCamera;
+    private bool _lowBatteryFired = false;
 
     // ================================================================
     //  Lifecycle
@@ -68,12 +62,12 @@ public class DroneInfo : MonoBehaviour
     {
         _cachedCamera = Camera.main;
 
-        // Setup navigator event
         if (navigator != null)
-        {
-            // We'll check route completion in Update
             _routeCompletedFired = false;
-        }
+
+        // Auto-find DroneSpec if not assigned
+        if (spec == null)
+            spec = GetComponent<DroneSpec>();
 
         // Create info panel
         if (infoPanelPrefab != null)
@@ -92,7 +86,10 @@ public class DroneInfo : MonoBehaviour
             }
         }
 
-        SetMissionState(MissionState.Flying);
+        if (navigator != null && !navigator.HasNoPath() && navigator.GetProgress() < 99.9f && navigator.GetTotalSegments() > 0)
+            SetMissionState(MissionState.Flying);
+        else
+            SetMissionState(MissionState.Idle);
     }
 
     void Update()
@@ -104,14 +101,47 @@ public class DroneInfo : MonoBehaviour
             CheckRouteCompletion();
         }
 
-        // ====== Info panel update ======
-        if (_panel != null && navigator != null)
+        // ====== Battery consumption ======
+        if (spec != null && navigator != null && missionState == MissionState.Flying)
         {
-            _panel.UpdateSpeed((float)navigator.cruiseSpeed);
-            _panel.UpdateStatus(missionState.ToString());
+            spec.ConsumeBattery(navigator.cruiseSpeed, Time.deltaTime);
+
+            // Low battery check
+            if (spec.IsLowBattery && !_lowBatteryFired)
+            {
+                _lowBatteryFired = true;
+                OnLowBattery?.Invoke(this);
+                Debug.LogWarning($"[{GetName()}] Low battery: {spec.BatteryPercent:F0}%");
+            }
+        }
+
+        // ====== Info panel update ======
+        if (_panel != null)
+        {
+            if (navigator != null)
+            {
+                _panel.UpdateSpeed((float)navigator.cruiseSpeed);
+                _panel.UpdateStatus(missionState.ToString());
+
+                // Position update
+                var anchor = navigator.GetComponent<CesiumGlobeAnchor>();
+                if (anchor != null)
+                {
+                    var llh = anchor.longitudeLatitudeHeight;
+                    _panel.UpdatePosition(llh.x, llh.y, llh.z);
+                }
+            }
+
+            // Battery & cargo update
+            if (spec != null)
+            {
+                _panel.UpdateBattery(spec.BatteryPercent, spec.batteryState.ToString());
+                _panel.UpdateCargo(spec.currentLoad, spec.maxCapacity);
+            }
         }
 
         // ====== Click to toggle info panel ======
+        if (UIInputBlocker.IsBlocking) return;
         if (_panel != null && Input.GetMouseButtonDown(0))
         {
             if (_cachedCamera == null) _cachedCamera = Camera.main;
@@ -126,22 +156,27 @@ public class DroneInfo : MonoBehaviour
                 }
             }
         }
-
-        
     }
 
     // ================================================================
     //  Mission State Management
     // ================================================================
 
-    /// <summary>
-    /// Automatically update mission state based on navigator status
-    /// </summary>
     private void UpdateMissionState()
     {
         MissionState newState = missionState;
 
-        if (navigator.IsPaused())
+        if (missionState == MissionState.Charging)
+        {
+            // Stay in charging until explicitly changed
+            return;
+        }
+
+        if (navigator.HasNoPath())
+        {
+            newState = MissionState.Idle;
+        }
+        else if (navigator.IsPaused())
         {
             newState = MissionState.Paused;
         }
@@ -160,9 +195,6 @@ public class DroneInfo : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Set mission state and fire event
-    /// </summary>
     public void SetMissionState(MissionState newState)
     {
         if (newState == missionState) return;
@@ -173,12 +205,12 @@ public class DroneInfo : MonoBehaviour
         OnMissionStateChanged?.Invoke(this, oldState, newState);
 
         if (newState == MissionState.Flying)
+        {
             _routeCompletedFired = false;
+            _lowBatteryFired = false;
+        }
     }
 
-    /// <summary>
-    /// Check if drone has reached the end of its route
-    /// </summary>
     private void CheckRouteCompletion()
     {
         if (_routeCompletedFired) return;
@@ -191,9 +223,6 @@ public class DroneInfo : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Call this when assigning a new route to the drone
-    /// </summary>
     public void AssignRoute(string routeName)
     {
         currentRouteName = routeName;
@@ -201,9 +230,6 @@ public class DroneInfo : MonoBehaviour
         SetMissionState(MissionState.Flying);
     }
 
-    /// <summary>
-    /// Mark drone as idle (no active mission)
-    /// </summary>
     public void ClearMission()
     {
         currentRouteName = "";
@@ -211,7 +237,7 @@ public class DroneInfo : MonoBehaviour
     }
 
     // ================================================================
-    //  Snapshot (for CommandCenter / SceneStateProvider / LLM)
+    //  Snapshot
     // ================================================================
 
     [System.Serializable]
@@ -226,11 +252,13 @@ public class DroneInfo : MonoBehaviour
         public bool isPaused;
         public bool isStopped;
         public bool isIdle;
+        // New fields
+        public float batteryPercent;
+        public int currentLoad;
+        public int maxCapacity;
+        public string batteryState;
     }
 
-    /// <summary>
-    /// Get a complete snapshot of this drone's state
-    /// </summary>
     public Snapshot GetSnapshot()
     {
         var snap = new Snapshot
@@ -246,15 +274,37 @@ public class DroneInfo : MonoBehaviour
             snap.progressPercent = navigator.GetProgress();
             snap.isPaused = navigator.IsPaused();
             snap.isStopped = navigator.IsStopped();
-            snap.isIdle = navigator.GetProgress() >= 99.9f;
+            snap.isIdle = (missionState == MissionState.Idle);
 
             var anchor = navigator.GetComponent<CesiumGlobeAnchor>();
             if (anchor != null)
                 snap.positionLLH = anchor.longitudeLatitudeHeight;
         }
 
+        if (spec != null)
+        {
+            snap.batteryPercent = spec.BatteryPercent;
+            snap.currentLoad = spec.currentLoad;
+            snap.maxCapacity = spec.maxCapacity;
+            snap.batteryState = spec.batteryState.ToString();
+        }
+
         return snap;
     }
+
+    // ================================================================
+    //  Info Panel Access (for external scripts)
+    // ================================================================
+
+    /// <summary>Show or hide the info panel</summary>
+    public void ShowInfoPanel(bool show)
+    {
+        if (_panel != null)
+            _panel.ShowPanel(show);
+    }
+
+    /// <summary>Is the info panel currently visible?</summary>
+    public bool IsInfoPanelVisible => _panel != null && _panel.isVisible;
 
     // ================================================================
     //  Public Getters
@@ -283,5 +333,10 @@ public class DroneInfo : MonoBehaviour
     public bool IsFlying()
     {
         return missionState == MissionState.Flying;
+    }
+
+    public bool IsCharging()
+    {
+        return missionState == MissionState.Charging;
     }
 }

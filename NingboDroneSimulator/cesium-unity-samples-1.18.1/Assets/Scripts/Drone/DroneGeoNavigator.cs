@@ -81,6 +81,11 @@ public class DroneGeoNavigator : MonoBehaviour
     
     #endregion
 
+        /// <summary>
+    /// Returns true if the navigator has no path loaded (waiting for InjectPath)
+    /// </summary>
+    public bool HasNoPath() => _pathLLH.Count < 2;
+
     public void SetStop(StopReason reason, bool stop)
     {
         StopReason before = _stopReasons;
@@ -244,11 +249,14 @@ public class DroneGeoNavigator : MonoBehaviour
             Debug.LogError($"{_logPrefix} 缺少CesiumGeoreference！");
             enabled = false; return;
         }
-        
+
+        // waypointsParent 可以为空——运行时创建的无人机通过 InjectPath 接收路径
         if (!waypointsParent)
         {
-            Debug.LogError($"{_logPrefix} 未指定航点父物体！");
-            enabled = false; return;
+            Debug.Log($"{_logPrefix} 无航点父物体，等待 InjectPath 或 LoadRoute 指派任务");
+            // 不禁用！保持 enabled = true，这样 LateUpdate 可以运行
+            // LateUpdate 中 _pathLLH.Count < 2 会自然跳过移动
+            return;
         }
 
         var anchors = waypointsParent
@@ -259,17 +267,17 @@ public class DroneGeoNavigator : MonoBehaviour
             anchors = anchors.OrderBy(a => a.name, System.StringComparer.Ordinal);
 
         var llh = anchors.Select(a => a.longitudeLatitudeHeight).ToList();
-        
+
         if (llh.Count < 2)
         {
-            Debug.LogError($"{_logPrefix} 航点不足（至少2个）！");
-            enabled = false; return;
+            Debug.Log($"{_logPrefix} 航点不足，等待 InjectPath 或 LoadRoute 指派任务");
+            // 同样不禁用
+            return;
         }
-
 
         if (showProgressLogs)
             Debug.Log($"{_logPrefix} 已加载{llh.Count}个航点");
-        
+
         var densified = DensifyLlhLinear(llh, (double)densifyStepMeters);
         _pathLLH.Clear();
         _pathLLH.AddRange(densified);
@@ -528,57 +536,17 @@ public class DroneGeoNavigator : MonoBehaviour
         isInReplayMode = false;
     }
 
+    
+
 #if UNITY_EDITOR
     void OnDrawGizmos()
     {
         if (!showPathGizmos || !georeference) return;
 
-        // ====== Runtime: draw from _pathLLH (injected or loaded) ======
-        if (Application.isPlaying && _pathLLH.Count >= 2)
-        {
-            // Already-traveled path (dimmer)
-            Gizmos.color = new Color(pathGizmoColor.r, pathGizmoColor.g, pathGizmoColor.b, 0.2f);
-            for (int i = 0; i < Mathf.Min(_segmentIndex, _pathLLH.Count - 1); i++)
-            {
-                Vector3 a = LLHToUnity(_pathLLH[i]);
-                Vector3 b = LLHToUnity(_pathLLH[i + 1]);
-                Gizmos.DrawLine(a, b);
-            }
-
-            // Remaining path (bright)
-            Gizmos.color = pathGizmoColor;
-            for (int i = Mathf.Max(0, _segmentIndex); i < _pathLLH.Count - 1; i++)
-            {
-                Vector3 a = LLHToUnity(_pathLLH[i]);
-                Vector3 b = LLHToUnity(_pathLLH[i + 1]);
-                Gizmos.DrawLine(a, b);
-            }
-
-            // Endpoint marker
-            Gizmos.color = Color.red;
-            Vector3 endPos = LLHToUnity(_pathLLH[_pathLLH.Count - 1]);
-            Gizmos.DrawWireSphere(endPos, 3f);
-
-            // Current position marker
-            Gizmos.color = Color.green;
-            Gizmos.DrawWireSphere(transform.position, 3f);
-
-            // Forward direction
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawRay(transform.position, transform.forward * 15f);
-
-            // Next target
-            if (_segmentIndex < _pathLLH.Count - 1)
-            {
-                Vector3 targetPos = LLHToUnity(_pathLLH[_segmentIndex + 1]);
-                Gizmos.color = Color.magenta;
-                Gizmos.DrawLine(transform.position, targetPos);
-            }
-
-            return; // Skip editor-only waypoint drawing when playing
-        }
-
         // ====== Editor (not playing): draw from waypointsParent ======
+        // When playing, OnRenderObject handles everything in Game view
+        if (Application.isPlaying) return;
+
         if (waypointsParent == null) return;
 
         var anchors = waypointsParent.GetComponentsInChildren<CesiumGlobeAnchor>(false);
@@ -600,8 +568,17 @@ public class DroneGeoNavigator : MonoBehaviour
             Gizmos.DrawWireSphere(pos, 2f);
         }
     }
+#endif
 
-        // ====== Game View path visualization using GL ======
+
+    // ====== Game View Path Rendering (NOT inside #if UNITY_EDITOR) ======
+
+    [Header("=== Path Line Settings ===")]
+    [Range(0.5f, 30f)]
+    public float pathLineWidth = 3f;
+    [Range(0.5f, 5f)]
+    public float pathLineDistanceScale = 2f;
+
     private Material _lineMaterial;
 
     private void EnsureLineMaterial()
@@ -626,25 +603,115 @@ public class DroneGeoNavigator : MonoBehaviour
         EnsureLineMaterial();
         if (_lineMaterial == null) return;
 
+        // Camera.current 在 Cesium 环境下经常为 null
+        // 改用 Camera.main
+        Camera cam = Camera.current;
+        if (cam == null) cam = Camera.main;
+        if (cam == null) return;
+
+        bool isTopView = Vector3.Dot(cam.transform.forward, Vector3.down) > 0.7f;
+
+        float baseWidth = isTopView ? pathLineWidth * 2f : pathLineWidth;
+
+        float distToPath = 0f;
+        if (_segmentIndex < _pathLLH.Count)
+        {
+            Vector3 pathPos = LLHToUnity(_pathLLH[Mathf.Min(_segmentIndex, _pathLLH.Count - 1)]);
+            distToPath = Vector3.Distance(cam.transform.position, pathPos);
+        }
+        float distFactor = Mathf.Lerp(1f, pathLineDistanceScale, Mathf.InverseLerp(50f, 1000f, distToPath));
+        float lineWidth = baseWidth * distFactor;
+
         _lineMaterial.SetPass(0);
 
-        // Draw remaining path
         GL.PushMatrix();
         GL.MultMatrix(Matrix4x4.identity);
-        GL.Begin(GL.LINES);
 
-        // Remaining path in cyan
-        GL.Color(new Color(pathGizmoColor.r, pathGizmoColor.g, pathGizmoColor.b, 0.8f));
-        for (int i = Mathf.Max(0, _segmentIndex); i < _pathLLH.Count - 1; i++)
+        Color lineColor = new Color(pathGizmoColor.r, pathGizmoColor.g, pathGizmoColor.b, 0.85f);
+
+        int startIdx = Mathf.Max(0, _segmentIndex);
+        DrawQuadStrip(cam, startIdx, _pathLLH.Count - 1, lineColor, lineWidth, isTopView);
+
+        if (_pathLLH.Count > 0)
+        {
+            Vector3 endPos = LLHToUnity(_pathLLH[_pathLLH.Count - 1]);
+            float crossSize = isTopView ? 12f : 4f;
+            DrawQuadLine(cam, endPos + Vector3.left * crossSize, endPos + Vector3.right * crossSize, Color.red, lineWidth * 0.8f, isTopView);
+            DrawQuadLine(cam, endPos + Vector3.forward * crossSize, endPos + Vector3.back * crossSize, Color.red, lineWidth * 0.8f, isTopView);
+        }
+
+        GL.PopMatrix();
+    }
+
+    private void DrawQuadStrip(Camera cam, int fromIndex, int toIndex, Color color, float width, bool isTopView)
+    {
+        if (fromIndex >= toIndex) return;
+
+        GL.Begin(GL.QUADS);
+        GL.Color(color);
+
+        for (int i = fromIndex; i < toIndex && i < _pathLLH.Count - 1; i++)
         {
             Vector3 a = LLHToUnity(_pathLLH[i]);
             Vector3 b = LLHToUnity(_pathLLH[i + 1]);
-            GL.Vertex3(a.x, a.y, a.z);
-            GL.Vertex3(b.x, b.y, b.z);
+
+            Vector3 segDir = (b - a).normalized;
+            Vector3 offset;
+
+            if (isTopView)
+                offset = new Vector3(-segDir.z, 0, segDir.x) * (width * 0.5f);
+            else
+                offset = Vector3.Cross(segDir, cam.transform.forward).normalized * (width * 0.5f);
+
+            GL.Vertex3(a.x - offset.x, a.y - offset.y, a.z - offset.z);
+            GL.Vertex3(a.x + offset.x, a.y + offset.y, a.z + offset.z);
+            GL.Vertex3(b.x + offset.x, b.y + offset.y, b.z + offset.z);
+            GL.Vertex3(b.x - offset.x, b.y - offset.y, b.z - offset.z);
         }
 
         GL.End();
-        GL.PopMatrix();
     }
+
+    private void DrawQuadLine(Camera cam, Vector3 a, Vector3 b, Color color, float width, bool isTopView)
+    {
+        Vector3 segDir = (b - a).normalized;
+        Vector3 offset;
+
+        if (isTopView)
+            offset = new Vector3(-segDir.z, 0, segDir.x) * (width * 0.5f);
+        else
+            offset = Vector3.Cross(segDir, cam.transform.forward).normalized * (width * 0.5f);
+
+        GL.Begin(GL.QUADS);
+        GL.Color(color);
+        GL.Vertex3(a.x - offset.x, a.y - offset.y, a.z - offset.z);
+        GL.Vertex3(a.x + offset.x, a.y + offset.y, a.z + offset.z);
+        GL.Vertex3(b.x + offset.x, b.y + offset.y, b.z + offset.z);
+        GL.Vertex3(b.x - offset.x, b.y - offset.y, b.z - offset.z);
+        GL.End();
+    }
+    
+    // ====== Static: Toggle all path lines ======
+    private static bool _globalPathVisible = true;
+    public static bool GlobalPathVisible => _globalPathVisible;
+
+    /// <summary>
+    /// Toggle path line visibility for ALL drones
+    /// </summary>
+    public static void ToggleAllPathLines()
+    {
+        _globalPathVisible = !_globalPathVisible;
+
+#if UNITY_2023_1_OR_NEWER
+        var navs = FindObjectsByType<DroneGeoNavigator>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+        var navs = FindObjectsOfType<DroneGeoNavigator>(true);
 #endif
+        foreach (var nav in navs)
+            nav.showPathGizmos = _globalPathVisible;
+
+        Debug.Log($"[Navigator] Path lines: {(_globalPathVisible ? "ON" : "OFF")}");
+    }
+
+
 }

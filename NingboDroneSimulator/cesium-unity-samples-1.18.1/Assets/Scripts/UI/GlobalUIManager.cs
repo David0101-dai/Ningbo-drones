@@ -26,5 +26,10 @@ public class GlobalUIManager : MonoBehaviour
         {
             llmPanel.SetActive(false);
         }
+
+        if (Input.GetKeyDown(KeyCode.P))
+        {
+            DroneGeoNavigator.ToggleAllPathLines();
+        }
     }
 }

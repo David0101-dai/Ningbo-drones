@@ -174,15 +174,16 @@ public class DroneCommandCenter : MonoBehaviour
     /// </summary>
     public string GetFleetStatusText()
     {
-        if (_infoByName.Count == 0) return "No drones registered";
+        var snapshots = GetFleetSnapshot(); // Already deduped
+        if (snapshots.Count == 0) return "No drones registered";
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"Fleet: {_infoByName.Count} drones");
+        sb.AppendLine($"Fleet: {snapshots.Count} drones");
 
-        foreach (var kvp in _infoByName)
+        foreach (var s in snapshots)
         {
-            var s = kvp.Value.GetSnapshot();
-            sb.AppendLine($"  {s.name}: {s.missionState} | {s.speedMps:F1}m/s | {s.progressPercent:F0}% | Route: {s.currentRoute}");
+            string routeDisplay = string.IsNullOrEmpty(s.currentRoute) ? "none" : s.currentRoute;
+            sb.AppendLine($"  {s.name}: {s.missionState} | {s.speedMps:F1}m/s | {s.progressPercent:F0}% | Route: {routeDisplay}");
         }
 
         return sb.ToString();
@@ -315,19 +316,30 @@ public class DroneCommandCenter : MonoBehaviour
     }
 
     /// <summary>
-    /// Get list of idle drones (reached end of route and not stopped)
+    /// Get list of idle drone DISPLAY NAMES (unique, no duplicates).
+    /// A drone is idle if: no path loaded, or reached end of route and not stopped.
     /// </summary>
     public List<string> GetIdleDrones()
     {
         var idle = new List<string>();
-        foreach (var kvp in _navByName)
+        var seen = new HashSet<DroneInfo>();
+
+        foreach (var kvp in _infoByName)
         {
-            if (kvp.Value == null) continue;
-            if (kvp.Value.GetProgress() >= 99.9f && !kvp.Value.IsStopped())
-                idle.Add(kvp.Key);
+            var info = kvp.Value;
+            if (info == null) continue;
+            if (!seen.Add(info)) continue; // Skip duplicate entries
+
+            // Check idle via DroneInfo (which now handles HasNoPath)
+            if (info.IsIdle())
+            {
+                idle.Add(info.GetName()); // Always use display name
+            }
         }
+
         return idle;
     }
+    
         // ================================================================
     //  Command Protocol: Unified command execution
     // ================================================================

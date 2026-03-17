@@ -185,4 +185,47 @@ public class LocationManager : MonoBehaviour
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Remove a specific location point from the registry.
+    /// Does NOT destroy the GameObject — caller handles that.
+    /// </summary>
+    public bool RemovePoint(LocationPoint point)
+    {
+        if (point == null) return false;
+        bool removed = _allPoints.Remove(point);
+        if (removed)
+        {
+            Debug.Log($"[LocationManager] Removed point: {point.GetDisplayName()}");
+            OnPointsChanged?.Invoke();
+        }
+        return removed;
+    }
+
+    /// <summary>
+    /// Remove all points matching a predicate.
+    /// Destroys their GameObjects.
+    /// </summary>
+    public int RemovePointsWhere(System.Predicate<LocationPoint> predicate)
+    {
+        var toRemove = _allPoints.FindAll(predicate);
+        int count = 0;
+
+        foreach (var point in toRemove)
+        {
+            if (point == null) continue;
+            _allPoints.Remove(point);
+            if (point.gameObject != null)
+                Destroy(point.gameObject);
+            count++;
+        }
+
+        if (count > 0)
+        {
+            Debug.Log($"[LocationManager] Removed {count} points");
+            OnPointsChanged?.Invoke();
+        }
+
+        return count;
+    }
 }

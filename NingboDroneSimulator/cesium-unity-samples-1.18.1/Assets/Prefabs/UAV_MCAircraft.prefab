@@ -44,10 +44,11 @@ GameObject:
   - component: {fileID: 2178868115032404087}
   - component: {fileID: 1331128659972587919}
   - component: {fileID: 3455872191160576865}
+  - component: {fileID: 4657164145832318324}
   - component: {fileID: 5291710196469027569}
   - component: {fileID: 5190808082399562373}
   m_Layer: 7
-  m_Name: UAV_MCAircraft_A
+  m_Name: UAV_MCAircraft
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -87,24 +88,24 @@ MonoBehaviour:
   _detectTransformChanges: 0
   _localToGlobeFixedMatrix:
     c0:
-      x: -0.8522155750084022
-      y: -0.5231908000429626
-      z: -0.000021529123243951343
+      x: -0.8522109211852463
+      y: -0.523198380444411
+      z: -0.00002264815869727938
       w: 0
     c1:
-      x: -0.4536964795963369
-      y: 0.7389970998436936
-      z: 0.4980389450881332
+      x: -0.4537022184863699
+      y: 0.7389906395885286
+      z: 0.4980433028774544
       w: 0
     c2:
-      x: 0.26055348417357405
-      y: -0.4244463136522861
-      z: 0.867154662509518
+      x: 0.26055871267938824
+      y: -0.42444821745518363
+      z: 0.8671521596271193
       w: 0
     c3:
-      x: -2896233.420945941
-      y: 4717322.663833063
-      z: 3157927.1362499623
+      x: -2896232.7851225766
+      y: 4717321.628227805
+      z: 3157929.252106923
       w: 1
   _localToGlobeFixedMatrixIsValid: 1
 --- !u!114 &2178868115032404087
@@ -140,7 +141,9 @@ MonoBehaviour:
   showProgressLogs: 0
   showPathGizmos: 1
   showMovementLogs: 0
-  pathGizmoColor: {r: 1, g: 0.03279034, b: 0, a: 1}
+  pathGizmoColor: {r: 0.9478849, g: 1, b: 0, a: 1}
+  pathLineWidth: 1.7
+  pathLineDistanceScale: 0.73
 --- !u!114 &1331128659972587919
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -167,7 +170,7 @@ MonoBehaviour:
   logInfo: 0
   drawDebug: 0
   debugDrawGridSlice: 1
-  debugLogSearchDetails: 1
+  debugLogSearchDetails: 0
 --- !u!114 &3455872191160576865
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -180,14 +183,40 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf4c7f6d5dcf5a848999d5281a66e12b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  displayName: BBB
+  displayName: AAA
   uiColor: {r: 0, g: 0.7987421, b: 0.7987421, a: 0.43529412}
   uiAnchor: {fileID: 9040535741330029267}
   navigator: {fileID: 2178868115032404087}
+  spec: {fileID: 4657164145832318324}
   infoPanelPrefab: {fileID: 6044137641284671409, guid: bcda4c86afb3814439a8d464102d48b2,
     type: 3}
   missionState: 0
   currentRouteName: 
+--- !u!114 &4657164145832318324
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2133385408509951478}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4b549550a04773745ba9453f27c74350, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxCapacity: 200
+  currentLoad: 0
+  minSpeed: 5
+  maxSpeed: 30
+  defaultSpeed: 15
+  maxBatteryWh: 500
+  currentBatteryWh: 500
+  basePowerW: 50
+  speedPowerFactor: 8
+  cargoPowerFactor: 0.5
+  lowBatteryThresholdPercent: 15
+  chargeRateWhPerSec: 50
+  batteryState: 0
 --- !u!65 &5291710196469027569
 BoxCollider:
   m_ObjectHideFlags: 0

@@ -16,10 +16,10 @@ public class RuntimeWaypointsBuilder : MonoBehaviour
     public float safetyRadius = 2.0f;
 
     [Header("Altitude (LLH height based)")]
-    public float pickLiftMin = 25f;          // 兜底：起终点至少离地(相对原点)这么高
-    public float cruiseHeightOffset = 60f;   // 巡航高度相对 max(start,end) 的加高
-    public float heightStep = 20f;
-    public int maxHeightRetries = 10;
+    public float pickLiftMin = 20f;          // 兜底最低高度：20m (was 25)
+    public float cruiseHeightOffset = 10f;   // 巡航高度偏移：只加10m (was 60)
+    public float heightStep = 10f;           // 每次抬升步长：10m (was 20)
+    public int maxHeightRetries = 5;         // 减少重试次数 (was 10)
 
     [Header("Escape from near-building (key fix)")]
     public float escapeRadiusMin = 10f;

@@ -1,3 +1,4 @@
+// Assets/Scripts/Drone/DroneInfoPanel.cs
 using UnityEngine;
 using TMPro;
 
@@ -7,6 +8,9 @@ public class DroneInfoPanel : MonoBehaviour
     public TMP_Text nameText;
     public TMP_Text speedText;
     public TMP_Text statusText;
+    public TMP_Text positionText;     // 新增：经纬度
+    public TMP_Text batteryText;      // 新增：电量
+    public TMP_Text cargoText;        // 新增：载重
 
     [Header("Follow Settings")]
     public Transform targetDrone;
@@ -70,10 +74,20 @@ public class DroneInfoPanel : MonoBehaviour
         }
     }
 
+    // ================================================================
+    //  Public API
+    // ================================================================
+
     public void TogglePanel()
     {
         isVisible = !isVisible;
         canvas.enabled = isVisible;
+    }
+
+    public void ShowPanel(bool show)
+    {
+        isVisible = show;
+        if (canvas) canvas.enabled = show;
     }
 
     public void SetName(string droneName)
@@ -86,12 +100,36 @@ public class DroneInfoPanel : MonoBehaviour
         if (speedText)
         {
             float kmh = speedMps * 3.6f;
-            speedText.text = $"{kmh:F1} km/h";
+            speedText.text = $"Speed: {kmh:F1} km/h";
         }
     }
 
     public void UpdateStatus(string state)
     {
         if (statusText) statusText.text = state;
+    }
+
+    /// <summary>Update position display (longitude, latitude, height)</summary>
+    public void UpdatePosition(double lon, double lat, double height)
+    {
+        if (positionText)
+            positionText.text = $"Lon:{lon:F4} Lat:{lat:F4}\\nAlt:{height:F0}m";
+    }
+
+    /// <summary>Update battery display</summary>
+    public void UpdateBattery(float percent, string state)
+    {
+        if (batteryText)
+        {
+            string colorTag = percent > 50 ? "green" : percent > 20 ? "yellow" : "red";
+            batteryText.text = $"Bat: <color={colorTag}>{percent:F0}%</color> {state}";
+        }
+    }
+
+    /// <summary>Update cargo display</summary>
+    public void UpdateCargo(int current, int max)
+    {
+        if (cargoText)
+            cargoText.text = $"Cargo: {current}/{max}";
     }
 }

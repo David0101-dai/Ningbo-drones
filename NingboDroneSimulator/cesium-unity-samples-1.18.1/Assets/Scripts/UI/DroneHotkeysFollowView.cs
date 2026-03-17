@@ -29,6 +29,7 @@ public class DroneHotkeysFollowView : MonoBehaviour
 
     void Update()
     {
+        if (UIInputBlocker.IsBlocking) return;
             // Skip hotkeys when UI input field is focused
         if (UnityEngine.EventSystems.EventSystem.current != null &&
             UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject != null)

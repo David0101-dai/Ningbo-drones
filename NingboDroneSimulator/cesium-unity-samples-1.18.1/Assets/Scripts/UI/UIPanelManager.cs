@@ -12,7 +12,7 @@ public class UIPanelManager : MonoBehaviour
     [Header("=== Panels ===")]
     [SerializeField] private GameObject defaultPanel;
     [SerializeField] private GameObject planningPanel;
-    [SerializeField] private GameObject replayPanel;        // ← 新增
+    [SerializeField] private GameObject replayPanel;        
     [SerializeField] private TMP_Text outputText;
 
     // ================================================================
@@ -24,7 +24,7 @@ public class UIPanelManager : MonoBehaviour
     [SerializeField] private Button pauseAllButton;
     [SerializeField] private Button resumeAllButton;
     [SerializeField] private Button enterPlanningButton;
-    [SerializeField] private Button enterReplayButton;      // ← 新增
+    [SerializeField] private Button enterReplayButton;      
     [SerializeField] private Button saveLogButton;
 
     // ================================================================
@@ -50,7 +50,12 @@ public class UIPanelManager : MonoBehaviour
     [SerializeField] private Button pauseReplayButton;
     [SerializeField] private Button stopReplayButton;
     [SerializeField] private TMP_Dropdown speedDropdown;
-    [SerializeField] private Button saveLogInReplayButton;  // 可选
+    [SerializeField] private Button saveLogInReplayButton;  
+
+    [Header("=== Mission Mode ===")]
+    [SerializeField] private GameObject missionPanel;
+    [SerializeField] private Button enterMissionButton;
+    [SerializeField] private Button exitMissionButton;
 
     [Header("=== Optional Toggle ===")]
     [SerializeField] private Toggle pauseToggleOptional;
@@ -139,10 +144,15 @@ public class UIPanelManager : MonoBehaviour
         if (!speedDropdown)         speedDropdown         = FindDropdown(speedDropdownName);
         if (!saveLogInReplayButton) saveLogInReplayButton = FindButton(saveLogInReplayName);
 
+        // Mission
+        if (!enterMissionButton) enterMissionButton = FindButton("EnterMissionButton");
+        if (!exitMissionButton) exitMissionButton = FindButton("ExitMissionButton");
+
         // ---------- 面板初始状态 ----------
         if (defaultPanel)  defaultPanel.SetActive(true);
         if (planningPanel) planningPanel.SetActive(false);
         if (replayPanel)   replayPanel.SetActive(false);
+        if (missionPanel) missionPanel.SetActive(false);
 
         // ---------- 绑定事件 ----------
         BindDefaultEvents();
@@ -197,6 +207,7 @@ public class UIPanelManager : MonoBehaviour
         BindButton(enterPlanningButton, EnterPlanning);
         BindButton(enterReplayButton, EnterReplay);
         BindButton(saveLogButton, OnSaveLog);
+        BindButton(enterMissionButton, EnterMission);
 
         if (pauseToggleOptional)
         {
@@ -257,6 +268,22 @@ public class UIPanelManager : MonoBehaviour
     }
 
     // ================================================================
+    //  Mission Mode 事件绑定（全新）
+    // ================================================================
+
+    public void EnterMission()
+    {
+        ShowOnlyPanel(missionPanel);
+        UpdateOutputText("Mission Mode: Manage fleet, points, and orders.");
+    }
+
+    public void ExitMission()
+    {
+        ShowOnlyPanel(defaultPanel);
+        UpdateOutputText("Default Mode: Enter LLM commands.");
+    }
+
+    // ================================================================
     //  面板切换
     // ================================================================
 
@@ -265,6 +292,7 @@ public class UIPanelManager : MonoBehaviour
         if (defaultPanel)  defaultPanel.SetActive(panel == defaultPanel);
         if (planningPanel) planningPanel.SetActive(panel == planningPanel);
         if (replayPanel)   replayPanel.SetActive(panel == replayPanel);
+        if (missionPanel)  missionPanel.SetActive(panel == missionPanel);
     }
 
     public void ResetToDefaultMode()
@@ -728,7 +756,7 @@ public class UIPanelManager : MonoBehaviour
         gameObject.SetActive(false);
     }
 
-    private void UpdateOutputText(string msg)
+    public void UpdateOutputText(string msg)
     {
         if (outputText) outputText.text = msg;
     }

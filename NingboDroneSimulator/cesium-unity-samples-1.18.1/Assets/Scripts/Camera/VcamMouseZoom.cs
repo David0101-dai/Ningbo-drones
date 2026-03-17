@@ -47,6 +47,8 @@ public class VcamMouseZoom : MonoBehaviour
 
     void Update()
     {
+        if (UIInputBlocker.IsBlocking) return;
+        
         float scroll = Input.mouseScrollDelta.y;
         if (Mathf.Approximately(scroll, 0f)) return;
 
