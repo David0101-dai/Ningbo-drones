@@ -30,6 +30,22 @@ public class Logger : MonoBehaviour
     public bool IsRecording => _isRecording;
     public int FrameCount => _currentLog?.frames?.Count ?? 0;
 
+    // ====== Path Helper ======
+    /// <summary>
+    /// Returns a folder inside the project directory (Editor) or next to the .exe (Build).
+    /// Keeps C: drive clean.
+    /// </summary>
+    private static string GetLogDirectory()
+    {
+        #if UNITY_EDITOR
+            string projectRoot = Path.GetDirectoryName(Application.dataPath);
+            return Path.Combine(projectRoot, "Logs", "FlightLogs");
+        #else
+            string exeDir = Path.GetDirectoryName(Application.dataPath);
+            return Path.Combine(exeDir, "Logs", "FlightLogs");
+        #endif
+    }
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -47,7 +63,6 @@ public class Logger : MonoBehaviour
     /// </summary>
     public void StartNewSession()
     {
-        // Prevent accidental re-initialization that would reset timestamps
         if (_sessionInitialized && _isRecording)
         {
             Debug.LogWarning("[Logger] Session already active, ignoring StartNewSession call");
@@ -86,10 +101,8 @@ public class Logger : MonoBehaviour
     {
         if (!_isRecording || _currentLog == null) return;
 
-        // Skip invalid position data
         if (llh.x == 0 && llh.y == 0 && llh.z == 0) return;
 
-        // ====== Sample interval control ======
         float now = Time.time;
         if (_lastRecordTime.TryGetValue(droneName, out float lastTime))
         {
@@ -97,7 +110,6 @@ public class Logger : MonoBehaviour
         }
         _lastRecordTime[droneName] = now;
 
-        // ====== Record frame ======
         float frameTime = now - _sessionStartTime;
 
         var frame = new DroneFrame
@@ -131,12 +143,15 @@ public class Logger : MonoBehaviour
             return null;
         }
 
-        // Sort by time to ensure correct replay order
         _currentLog.frames.Sort((a, b) => a.time.CompareTo(b.time));
 
         string json = JsonUtility.ToJson(_currentLog, true);
         string fileName = $"FlightLog_{_currentLog.sessionId}.json";
-        string path = Path.Combine(Application.persistentDataPath, fileName);
+
+        // ★ Changed: save to project directory instead of C: drive
+        string dir = GetLogDirectory();
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, fileName);
 
         File.WriteAllText(path, json);
         _saved = true;
@@ -165,7 +180,9 @@ public class Logger : MonoBehaviour
     public static List<(string fileName, string fullPath)> GetSavedLogFiles()
     {
         var result = new List<(string, string)>();
-        string dir = Application.persistentDataPath;
+
+        // ★ Changed: look in project directory instead of C: drive
+        string dir = GetLogDirectory();
 
         if (!Directory.Exists(dir)) return result;
 

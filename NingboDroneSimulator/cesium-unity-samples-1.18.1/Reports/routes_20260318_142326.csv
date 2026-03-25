@@ -1,0 +1,11 @@
+﻿Drone,RouteIndex,CustomerCount,TotalDemand,VehicleCapacity,StartTime,EndTime,TotalTime,DistanceMeters,OnTimeCount,LateCount,TotalLateness,BatteryStartPct,BatteryEndPct,BatteryUsedPct,Strategy,Completed
+V01,1,7,148,200,27.1,0.0,0.0,11040,0,0,0.0,100.0,0.0,0.0,Efficiency,False
+V02,2,8,117,200,27.1,0.0,0.0,12482,0,0,0.0,100.0,0.0,0.0,Efficiency,False
+V03,3,6,80,200,27.1,0.0,0.0,11230,0,0,0.0,100.0,0.0,0.0,Efficiency,False
+V04,4,6,87,200,27.1,0.0,0.0,11537,0,0,0.0,100.0,0.0,0.0,Efficiency,False
+V05,5,6,76,200,27.1,0.0,0.0,11667,0,0,0.0,100.0,0.0,0.0,Efficiency,False
+V06,6,6,91,200,27.1,0.0,0.0,10929,0,0,0.0,100.0,0.0,0.0,Efficiency,False
+V07,7,6,129,200,27.1,0.0,0.0,11818,0,0,0.0,100.0,0.0,0.0,Efficiency,False
+V08,8,5,89,200,27.1,346.7,319.5,8696,4,1,36.5,100.0,94.7,5.3,Efficiency,True
+V09,9,7,152,200,27.1,0.0,0.0,14724,0,0,0.0,100.0,0.0,0.0,Efficiency,False
+V10,10,5,76,200,27.1,330.1,302.9,8228,4,1,41.1,100.0,95.0,5.0,Efficiency,True

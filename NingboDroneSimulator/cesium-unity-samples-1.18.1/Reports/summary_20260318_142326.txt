@@ -1,0 +1,14 @@
+﻿=== Mission Summary ===
+Dataset: R1_2_1
+Strategy: Efficiency
+
+Deliveries: 60
+On time: 50 (83.3%)
+Late: 10
+Avg lateness: 32.2 time units
+Max lateness: 41.1 time units
+
+Routes completed: 2/10
+Total distance: 112350m (112.4km)
+Makespan: 320 time units
+Avg battery used: 5.2%

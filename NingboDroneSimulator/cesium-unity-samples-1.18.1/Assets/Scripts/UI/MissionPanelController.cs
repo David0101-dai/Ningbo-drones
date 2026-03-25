@@ -49,6 +49,9 @@ public class MissionPanelController : MonoBehaviour
     public Button solveRoutesButton;
     public Button dispatchAllButton;
     public Button stopAllButton;
+    public TMP_Dropdown speedModeDropdown;  // ← 新增
+    public Button exportReportButton;
+    public Button refreshStatusButton;
 
     [Header("=== Navigation ===")]
     public Button exitMissionButton;
@@ -76,6 +79,7 @@ public class MissionPanelController : MonoBehaviour
     private string _pendingPointName = "";
     private LocationPoint.PointType _pendingPointType;
     private List<string> _solomonFilePaths = new List<string>();
+
 
     void Awake()
     {
@@ -158,6 +162,9 @@ public class MissionPanelController : MonoBehaviour
         BindButton(ordersTabButton, () => { ShowTab(ordersTab); RefreshOrdersTab(); });
         BindButton(routingTabButton, () => { ShowTab(routingTab); RefreshRoutingTab(); });
 
+        BindButton(exportReportButton, OnExportReport);
+        BindButton(refreshStatusButton, () => ShowRoutingStatus());
+
         BindButton(exitMissionButton, () =>
         {
             if (_uiManager) _uiManager.ExitMission();
@@ -184,6 +191,13 @@ public class MissionPanelController : MonoBehaviour
         {
             strategyDropdown.onValueChanged.RemoveAllListeners();
             strategyDropdown.onValueChanged.AddListener(OnStrategyChanged);
+        }
+
+        // 新增：速度模式
+        if (speedModeDropdown != null)
+        {
+            speedModeDropdown.onValueChanged.RemoveAllListeners();
+            speedModeDropdown.onValueChanged.AddListener(OnSpeedModeChanged);
         }
     }
 
@@ -569,26 +583,8 @@ public class MissionPanelController : MonoBehaviour
 
     private void RefreshRoutingTab()
     {
-        RefreshStrategyDropdown();
+        RefreshStrategyDropdown();  // This now handles both dropdowns
         ShowRoutingStatus();
-    }
-
-    private void RefreshStrategyDropdown()
-    {
-        if (strategyDropdown == null) return;
-        strategyDropdown.ClearOptions();
-        strategyDropdown.AddOptions(new List<string>
-        {
-            "Balanced",
-            "Efficiency (Fast)",
-            "Economy (Low Cost)"
-        });
-
-        if (_router != null)
-        {
-            strategyDropdown.value = (int)_router.strategy;
-            strategyDropdown.RefreshShownValue();
-        }
     }
 
     private void ShowRoutingStatus()
@@ -616,20 +612,29 @@ public class MissionPanelController : MonoBehaviour
 
         sb.AppendLine();
 
+        // Mission tracking stats (live)
+        if (MissionTracker.Instance != null && MissionTracker.Instance.TotalStopsCompleted > 0)
+        {
+            sb.AppendLine($"--- Live Statistics ---");
+            sb.AppendLine($"Delivered: {MissionTracker.Instance.TotalStopsCompleted}");
+            sb.AppendLine($"On time: {MissionTracker.Instance.TotalOnTime} ({MissionTracker.Instance.OnTimePercent:F1}%)");
+            sb.AppendLine($"Late: {MissionTracker.Instance.TotalLate}");
+            sb.AppendLine();
+        }
+
         // Routing solution
         if (_router != null && _router.LastSolution != null && _router.LastSolution.Count > 0)
-        {
             sb.AppendLine(_router.GetSolutionSummary());
-        }
         else
         {
             sb.AppendLine("No routes planned yet.");
             sb.AppendLine();
             sb.AppendLine("Workflow:");
             sb.AppendLine("  1. Import Solomon data (Orders tab)");
-            sb.AppendLine("  2. Choose strategy above");
+            sb.AppendLine("  2. Choose strategy");
             sb.AppendLine("  3. Click 'Solve Routes'");
             sb.AppendLine("  4. Click 'Dispatch All'");
+            sb.AppendLine("  5. Click 'Export Report' when done");
         }
 
         // Dispatch status
@@ -642,7 +647,63 @@ public class MissionPanelController : MonoBehaviour
         SetOutput(sb.ToString());
     }
 
+    private void RefreshStrategyDropdown()
+    {
+        // ====== Solver Dropdown (算法选择) ======
+        if (strategyDropdown != null)
+        {
+            strategyDropdown.ClearOptions();
+
+            if (SolverRegistry.Instance != null && SolverRegistry.Instance.Count > 0)
+            {
+                strategyDropdown.AddOptions(SolverRegistry.Instance.SolverNames);
+                strategyDropdown.value = SolverRegistry.Instance.ActiveIndex;
+                strategyDropdown.RefreshShownValue();
+            }
+            else
+            {
+                strategyDropdown.AddOptions(new List<string> { "Solomon I1 Insertion", "Nearest Neighbor" });
+            }
+        }
+
+        // ====== Speed Mode Dropdown (速度模式) ======
+        if (speedModeDropdown != null)
+        {
+            speedModeDropdown.ClearOptions();
+            speedModeDropdown.AddOptions(new List<string>
+            {
+                "Balanced (15 m/s)",
+                "Efficiency (25 m/s)",
+                "Economy (10 m/s)"
+            });
+
+            if (_router != null)
+            {
+                speedModeDropdown.value = _router.strategy switch
+                {
+                    VehicleRouter.RoutingStrategy.Balanced => 0,
+                    VehicleRouter.RoutingStrategy.Efficiency => 1,
+                    VehicleRouter.RoutingStrategy.Economy => 2,
+                    _ => 0
+                };
+                speedModeDropdown.RefreshShownValue();
+            }
+        }
+    }
+
     private void OnStrategyChanged(int index)
+    {
+        // Now this controls SOLVER selection
+        if (SolverRegistry.Instance != null)
+        {
+            SolverRegistry.Instance.SetActiveSolver(index);
+            string name = SolverRegistry.Instance.ActiveSolver?.Name ?? "Unknown";
+            string desc = SolverRegistry.Instance.ActiveSolver?.Description ?? "";
+            SetOutput($"[OK] Solver: {name}\\n\\n{desc}\\n\\nClick 'Solve Routes' to plan.");
+        }
+    }
+
+    private void OnSpeedModeChanged(int index)
     {
         if (_router == null) return;
 
@@ -654,8 +715,10 @@ public class MissionPanelController : MonoBehaviour
             _ => VehicleRouter.RoutingStrategy.Balanced
         };
 
-        SetOutput($"[OK] Strategy set to: {_router.strategy}\\n\\n" +
-                  $"Click 'Solve Routes' to re-plan with new strategy.");
+        string speedStr = _router.GetPlanningSpeed().ToString("F0");
+        SetOutput($"[OK] Speed mode: {_router.strategy} ({speedStr} m/s)\\n\\n" +
+                $"This affects planning time estimates and drone flight speed.\\n" +
+                $"Click 'Solve Routes' to re-plan.");
     }
 
     private void OnSolveRoutes()
@@ -729,6 +792,14 @@ public class MissionPanelController : MonoBehaviour
             return;
         }
 
+        // Start mission tracking
+        if (MissionTracker.Instance != null)
+        {
+            string datasetName = _solomonImporter?.CurrentDataset?.name ?? "Unknown";
+            string strategy = _router.strategy.ToString();
+            MissionTracker.Instance.StartMission(datasetName, strategy);
+        }
+
         int count = _dispatcher.DispatchAll(_router.LastSolution);
 
         if (count > 0)
@@ -770,4 +841,34 @@ public class MissionPanelController : MonoBehaviour
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(action);
     }
+
+
+    private void OnExportReport()
+    {
+        if (MissionReportExporter.Instance == null)
+        {
+            SetOutput("[FAIL] MissionReportExporter not found.\nAdd it to a GameObject under LLMRoot.");
+            return;
+        }
+
+        if (MissionTracker.Instance == null || MissionTracker.Instance.TotalStopsCompleted == 0)
+        {
+            SetOutput("[INFO] No delivery data yet.\nDispatch routes and wait for at least one delivery to complete.\n\nYou can export at any time — it captures all data up to this moment.");
+            return;
+        }
+
+        string folder = MissionReportExporter.Instance.ExportAll();
+
+        if (!string.IsNullOrEmpty(folder))
+        {
+            string summary = MissionTracker.Instance.GetMissionSummary();
+            SetOutput($"[OK] Reports exported!\n\nFolder:\n{folder}\n\n" +
+                    $"(You can export again later for updated data)\n\n{summary}");
+        }
+        else
+        {
+            SetOutput("[FAIL] Export failed. Check console.");
+        }
+    }
+
 }

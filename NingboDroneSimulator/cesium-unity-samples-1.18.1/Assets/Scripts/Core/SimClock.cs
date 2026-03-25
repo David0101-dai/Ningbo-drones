@@ -3,8 +3,8 @@ using UnityEngine;
 
 /// <summary>
 /// Simulation clock that maps real time to simulation time.
-/// Solomon datasets use abstract time units; this clock lets us
-/// control speed, pause, and convert between real/sim time.
+/// Uses Time.unscaledDeltaTime * multiplier so it works correctly
+/// regardless of Time.timeScale setting.
 /// </summary>
 public class SimClock : MonoBehaviour
 {
@@ -27,17 +27,9 @@ public class SimClock : MonoBehaviour
     public System.Action<bool> OnPauseChanged;
 
     // ====== Properties ======
-
-    /// <summary>Current simulation time (abstract units, matches Solomon data)</summary>
     public float SimTime => _simTime;
-
-    /// <summary>Is the simulation clock running?</summary>
     public bool IsRunning => _isRunning && !_isPaused;
-
-    /// <summary>Is paused?</summary>
     public bool IsPaused => _isPaused;
-
-    /// <summary>Formatted time string HH:MM:SS</summary>
     public string DisplayTime => _displayTime;
 
     // ================================================================
@@ -54,7 +46,13 @@ public class SimClock : MonoBehaviour
     {
         if (!_isRunning || _isPaused) return;
 
-        _simTime += Time.deltaTime * simSpeedMultiplier;
+        // KEY FIX: Use unscaledDeltaTime so Time.timeScale doesn't
+        // double-count when SimSpeedController also sets timeScale.
+        // SimSpeedController sets both timeScale (for drone movement)
+        // and simSpeedMultiplier (for sim clock), so we must use
+        // unscaled time here to avoid multiplier × timeScale = N².
+        _simTime += Time.unscaledDeltaTime * simSpeedMultiplier;
+
         UpdateDisplayTime();
         OnSimTimeChanged?.Invoke(_simTime);
     }
@@ -63,7 +61,6 @@ public class SimClock : MonoBehaviour
     //  Control API
     // ================================================================
 
-    /// <summary>Start the simulation clock from time 0 (or specified start)</summary>
     public void StartSimulation(float startTime = 0f)
     {
         _simTime = startTime;
@@ -73,34 +70,29 @@ public class SimClock : MonoBehaviour
         Debug.Log($"[SimClock] Started at simTime={startTime:F1}, speed={simSpeedMultiplier}x");
     }
 
-    /// <summary>Stop the clock entirely</summary>
     public void StopSimulation()
     {
         _isRunning = false;
         Debug.Log($"[SimClock] Stopped at simTime={_simTime:F1}");
     }
 
-    /// <summary>Pause/resume</summary>
     public void SetPaused(bool paused)
     {
         _isPaused = paused;
         OnPauseChanged?.Invoke(paused);
     }
 
-    /// <summary>Toggle pause</summary>
     public void TogglePause()
     {
         SetPaused(!_isPaused);
     }
 
-    /// <summary>Set simulation speed multiplier</summary>
     public void SetSpeed(float multiplier)
     {
         simSpeedMultiplier = Mathf.Max(0.1f, multiplier);
         Debug.Log($"[SimClock] Speed set to {simSpeedMultiplier}x");
     }
 
-    /// <summary>Jump to specific simulation time</summary>
     public void SetSimTime(float time)
     {
         _simTime = Mathf.Max(0f, time);
@@ -108,13 +100,9 @@ public class SimClock : MonoBehaviour
     }
 
     // ================================================================
-    //  Conversion Helpers
+    //  Display
     // ================================================================
 
-    /// <summary>
-    /// Convert simulation time units to a display string.
-    /// Assumes 1 unit ~= 1 minute for display purposes.
-    /// </summary>
     private void UpdateDisplayTime()
     {
         int totalMinutes = Mathf.FloorToInt(_simTime);
@@ -124,9 +112,6 @@ public class SimClock : MonoBehaviour
         _displayTime = $"{hours:D2}:{minutes:D2}:{seconds:D2}";
     }
 
-    /// <summary>
-    /// Get simulation time as formatted string with speed indicator
-    /// </summary>
     public string GetStatusText()
     {
         string pauseStr = _isPaused ? " [PAUSED]" : "";

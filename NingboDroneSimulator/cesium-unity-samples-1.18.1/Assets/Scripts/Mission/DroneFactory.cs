@@ -151,6 +151,15 @@ public class DroneFactory : MonoBehaviour
         return drone;
     }
 
+    /// <summary>
+    /// Reset drone counter. Call before re-importing a new dataset.
+    /// </summary>
+    public void ResetCounter()
+    {
+        _droneCounter = 0;
+        Debug.Log("[DroneFactory] Counter reset to 0");
+    }
+
     private System.Collections.IEnumerator DiagnoseAfterSpawn(string droneName)
     {
         // Wait 2 frames for all Start() and coroutines to complete

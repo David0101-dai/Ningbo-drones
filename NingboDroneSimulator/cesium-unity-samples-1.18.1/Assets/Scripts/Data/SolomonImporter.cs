@@ -267,28 +267,49 @@ public class SolomonImporter : MonoBehaviour
     //  Step 2: Clear Existing Data
     // ================================================================
 
+    // 替换 SolomonImporter.cs 中的 ClearExistingData 方法：
+
     private void ClearExistingData()
     {
-        // 1. Clear all orders
+        // 1. Clear route dispatcher state FIRST (before destroying drones)
+        var dispatcher = FindObjectOfType<RouteDispatcher>();
+        if (dispatcher != null)
+            dispatcher.ClearAll();
+
+        // 2. Clear VehicleRouter last solution
+        if (VehicleRouter.Instance != null)
+        {
+            // Clear cached solution so OrderManager doesn't skip auto-assign
+            var field = typeof(VehicleRouter).GetField("_lastSolution",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (field != null)
+                field.SetValue(VehicleRouter.Instance, null);
+        }
+
+        // 3. Clear all orders
         if (orderManager != null)
             orderManager.ClearAllOrders();
 
-        // 2. Remove ALL drones (including pre-placed ones)
-        //    Solomon import creates a fresh fleet from scratch
+        // 4. Clear MissionTracker
+        if (MissionTracker.Instance != null)
+            MissionTracker.Instance.StartMission("", "");
+
+        // 5. Remove ALL drones
         if (droneFactory != null)
         {
             var names = new List<string>(droneFactory.GetDroneNames());
             foreach (var name in names)
-            {
                 droneFactory.RemoveDrone(name);
-            }
         }
 
-        // Also stop and remove any pre-placed drones that DroneFactory doesn't track
-        // (i.e. drones placed in the scene at edit time, not spawned at runtime)
+        // Also remove pre-placed drones
         RemovePreplacedDrones();
 
-        // 3. Remove Solomon-created location points (Depot_xxx and Cxxx)
+        // 6. Reset drone counter so next import starts from V01
+        if (droneFactory != null)
+            droneFactory.ResetCounter();
+
+        // 7. Remove Solomon-created location points
         if (locationManager != null)
         {
             locationManager.RemovePointsWhere(p =>
@@ -299,6 +320,15 @@ public class SolomonImporter : MonoBehaviour
             });
         }
 
+        // 8. Reset SimClock
+        if (SimClock.Instance != null)
+            SimClock.Instance.StopSimulation();
+
+        // 9. Reset speed to 1x
+        var speedController = FindObjectOfType<SimSpeedController>();
+        if (speedController != null)
+            speedController.ResetSpeed();
+
         EmitStatus("Cleared all drones, orders, and Solomon points");
     }
 
@@ -308,12 +338,13 @@ public class SolomonImporter : MonoBehaviour
     /// </summary>
     private void RemovePreplacedDrones()
     {
-        // Find all DroneInfo in scene
     #if UNITY_2023_1_OR_NEWER
         var allInfos = FindObjectsByType<DroneInfo>(FindObjectsInactive.Include, FindObjectsSortMode.None);
     #else
         var allInfos = FindObjectsOfType<DroneInfo>(true);
     #endif
+
+        var switchView = FindObjectOfType<SwitchView>();
 
         foreach (var info in allInfos)
         {
@@ -322,12 +353,11 @@ public class SolomonImporter : MonoBehaviour
             string droneName = info.GetName();
             EmitStatus($"Removing pre-placed drone: {droneName}");
 
-            // Unsubscribe from OrderManager
+            // Unsubscribe
             if (OrderManager.Instance != null)
                 OrderManager.Instance.UnsubscribeDrone(info);
 
-            // Remove camera target from SwitchView
-            var switchView = FindObjectOfType<SwitchView>();
+            // Remove camera target
             if (switchView != null)
             {
                 Transform camTarget = info.transform.Find("CamTarget");
@@ -342,19 +372,34 @@ public class SolomonImporter : MonoBehaviour
             // Stop navigator
             var nav = info.navigator;
             if (nav != null)
-            {
                 nav.SetStop(DroneGeoNavigator.StopReason.External, true);
-            }
 
-            // Destroy the GameObject
             Destroy(info.gameObject);
         }
 
-        // Refresh CommandCenter after all removals
+        // Refresh after destroy
+        StartCoroutine(RefreshAfterClear());
+    }
+
+    private System.Collections.IEnumerator RefreshAfterClear()
+    {
+        yield return null; // Wait for Destroy to take effect
+
         if (commandCenter != null)
+            commandCenter.Refresh();
+
+        // Ensure camera has target (might be empty temporarily)
+        var switchView = FindObjectOfType<SwitchView>();
+        if (switchView != null)
         {
-            // Delay refresh to next frame (after Destroy takes effect)
-            StartCoroutine(RefreshCommandCenterNextFrame());
+            switchView.CleanNullTargets();
+            // Don't call EnsureCameraHasTarget here — drones haven't been spawned yet
+            // Cameras will detach temporarily, which is fine
+            if (switchView.droneTargets == null || switchView.droneTargets.Length == 0)
+            {
+                if (switchView.sideView) { switchView.sideView.Follow = null; switchView.sideView.LookAt = null; }
+                if (switchView.rearChase) { switchView.rearChase.Follow = null; switchView.rearChase.LookAt = null; }
+            }
         }
     }
 
@@ -484,6 +529,15 @@ public class SolomonImporter : MonoBehaviour
         }
 
         Debug.Log($"[SolomonImporter] Spawned {spawned}/{count} drones at {depotName}");
+
+        // ★ 新增：确保摄像机跟踪新生成的无人机 ★
+        var switchView = FindObjectOfType<SwitchView>();
+        if (switchView != null)
+        {
+            switchView.CleanNullTargets();
+            switchView.EnsureCameraHasTarget();
+        }
+
         return spawned;
     }
 

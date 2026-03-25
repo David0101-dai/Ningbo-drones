@@ -75,6 +75,13 @@ public class SwitchView : MonoBehaviour
 
     void Update()
     {
+        // Safety: ensure camera always tracks something
+        if (droneTargets != null && droneTargets.Length > 0 &&
+            (_currentDroneIndex >= droneTargets.Length || droneTargets[_currentDroneIndex] == null))
+        {
+            EnsureCameraHasTarget();
+        }
+
         if (UIInputBlocker.IsBlocking) return;
 
         if (UnityEngine.EventSystems.EventSystem.current != null &&
@@ -177,10 +184,17 @@ public class SwitchView : MonoBehaviour
     void ApplyDroneTarget(int index)
     {
         if (droneTargets == null || droneTargets.Length == 0) return;
-        if (index < 0 || index >= droneTargets.Length) return;
+
+        // Clean null entries first
+        CleanNullTargets();
+
+        if (droneTargets.Length == 0) return;
+
+        index = Mathf.Clamp(index, 0, droneTargets.Length - 1);
+        _currentDroneIndex = index;
 
         Transform target = droneTargets[index];
-        if (!target) return;
+        if (target == null) return;
 
         if (sideView)
         {
@@ -192,6 +206,71 @@ public class SwitchView : MonoBehaviour
         {
             rearChase.Follow = target;
             rearChase.LookAt = target;
+        }
+    }
+
+    /// <summary>
+    /// Remove null entries from droneTargets array.
+    /// Called automatically when drones are destroyed.
+    /// </summary>
+    public void CleanNullTargets()
+    {
+        if (droneTargets == null) return;
+
+        var clean = new System.Collections.Generic.List<Transform>();
+        foreach (var t in droneTargets)
+        {
+            if (t != null)
+                clean.Add(t);
+        }
+
+        if (clean.Count != droneTargets.Length)
+        {
+            droneTargets = clean.ToArray();
+            _currentDroneIndex = Mathf.Clamp(_currentDroneIndex, 0,
+                Mathf.Max(0, droneTargets.Length - 1));
+        }
+    }
+
+    /// <summary>
+    /// Ensure cameras always have a valid target.
+    /// Call after drones are spawned or removed.
+    /// </summary>
+    public void EnsureCameraHasTarget()
+    {
+        CleanNullTargets();
+
+        if (droneTargets == null || droneTargets.Length == 0)
+        {
+            // No drones — try to find any DroneInfo in scene
+    #if UNITY_2023_1_OR_NEWER
+            var anyDrone = FindObjectsByType<DroneInfo>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+    #else
+            var anyDrone = FindObjectsOfType<DroneInfo>();
+    #endif
+            if (anyDrone.Length > 0)
+            {
+                var camTarget = anyDrone[0].transform.Find("CamTarget");
+                if (camTarget != null)
+                {
+                    droneTargets = new Transform[] { camTarget };
+                    _currentDroneIndex = 0;
+                    Debug.Log($"[SwitchView] Auto-assigned camera to {anyDrone[0].GetName()}");
+                }
+            }
+            else
+            {
+                // Absolutely no drones — detach cameras to prevent errors
+                if (sideView) { sideView.Follow = null; sideView.LookAt = null; }
+                if (rearChase) { rearChase.Follow = null; rearChase.LookAt = null; }
+                return;
+            }
+        }
+
+        if (droneTargets.Length > 0)
+        {
+            _currentDroneIndex = Mathf.Clamp(_currentDroneIndex, 0, droneTargets.Length - 1);
+            ApplyDroneTarget(_currentDroneIndex);
         }
     }
 }

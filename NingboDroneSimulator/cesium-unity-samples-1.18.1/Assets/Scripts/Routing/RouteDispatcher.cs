@@ -30,6 +30,8 @@ public class RouteDispatcher : MonoBehaviour
     [Range(0.5f, 0.95f)]
     public float lateWarningFactor = 0.85f;
 
+    private readonly Dictionary<string, int> _routeIndices = new();
+
     // ====== Active Dispatches ======
     private readonly Dictionary<string, ActiveDispatch> _activeDispatches = new();
 
@@ -175,7 +177,33 @@ public class RouteDispatcher : MonoBehaviour
         EmitStatus($"[Dispatcher] {droneName} dispatched: {route.customerCount} stops, " +
                    $"cargo={route.totalDemand}");
 
+        // Register with MissionTracker
+        if (MissionTracker.Instance != null)
+        {
+            int routeIdx = MissionTracker.Instance.BeginRoute(droneName, route);
+            // Store route index for later
+            _routeIndices[droneName] = routeIdx;
+        }
+
         return true;
+    }
+
+    /// <summary>
+    /// Clear all active dispatches. Call before importing new data.
+    /// </summary>
+    public void ClearAll()
+    {
+        foreach (var kvp in _activeDispatches)
+        {
+            if (commandCenter != null && commandCenter.TryGetNav(kvp.Key, out var nav))
+            {
+                nav.SetStop(DroneGeoNavigator.StopReason.External, true);
+                nav.SetStop(DroneGeoNavigator.StopReason.External, false);
+            }
+        }
+        _activeDispatches.Clear();
+        _routeIndices.Clear();
+        Debug.Log("[Dispatcher] All dispatches cleared");
     }
 
     // ================================================================
@@ -194,10 +222,49 @@ public class RouteDispatcher : MonoBehaviour
         double3 currentLLH = anchor.longitudeLatitudeHeight;
         double3 targetLLH = route.stops[stopIndex].locationLLH;
 
-        // For Solomon routes: use simplified low-altitude path
-        // instead of full RRT collision avoidance (which raises altitude too much)
-        var path = BuildLowAltitudePath(currentLLH, targetLLH);
-        nav.InjectPath(path, startNow: true);
+        // Try RuntimeWaypointsBuilder first (with collision avoidance)
+        bool routeBuilt = false;
+        if (routeBuilder != null)
+        {
+            // Temporarily enforce low altitude limits
+            float origCruiseOffset = routeBuilder.cruiseHeightOffset;
+            float origHeightStep = routeBuilder.heightStep;
+            int origMaxRetries = routeBuilder.maxHeightRetries;
+
+            // Clamp: max cruise = endpoint height + 15m, max retry = 3 steps of 5m
+            routeBuilder.cruiseHeightOffset = 10f;
+            routeBuilder.heightStep = 5f;
+            routeBuilder.maxHeightRetries = 3;
+
+            if (routeBuilder.BuildRoute(currentLLH, targetLLH, out var llhPath))
+            {
+                if (llhPath.Count > 0)
+                    llhPath[0] = currentLLH;
+
+                // Cap all waypoint heights to prevent excessive altitude
+                double maxAllowedHeight = System.Math.Max(currentLLH.z, targetLLH.z) + 20.0;
+                for (int i = 0; i < llhPath.Count; i++)
+                {
+                    if (llhPath[i].z > maxAllowedHeight)
+                        llhPath[i] = new double3(llhPath[i].x, llhPath[i].y, maxAllowedHeight);
+                }
+
+                nav.InjectPath(llhPath, startNow: true);
+                routeBuilt = true;
+            }
+
+            // Restore original values
+            routeBuilder.cruiseHeightOffset = origCruiseOffset;
+            routeBuilder.heightStep = origHeightStep;
+            routeBuilder.maxHeightRetries = origMaxRetries;
+        }
+
+        // Fallback: simple low-altitude path if route builder fails
+        if (!routeBuilt)
+        {
+            var path = BuildLowAltitudePath(currentLLH, targetLLH);
+            nav.InjectPath(path, startNow: true);
+        }
 
         // Update DroneInfo
         if (commandCenter.TryGetInfo(droneName, out var info))
@@ -217,35 +284,26 @@ public class RouteDispatcher : MonoBehaviour
             currentStop.order.assignedDrone = droneName;
         }
 
-        Debug.Log($"[Dispatcher] {droneName} flying to stop {stopIndex}: {route.stops[stopIndex]}");
+        Debug.Log($"[Dispatcher] {droneName} flying to stop {stopIndex}: {route.stops[stopIndex]} " +
+                $"(RRT={routeBuilt})");
     }
 
     /// <summary>
-    /// Build a simple low-altitude path for Solomon route segments.
-    /// Uses a gentle climb-cruise-descend profile instead of full RRT.
-    ///
-    /// Profile:
-    ///   Start (25m) → Cruise (35m) → End (25m)
-    ///
-    /// For short distances (<200m): direct path
-    /// For longer distances: 3-point path with slight altitude bump
+    /// Fallback: simple low-altitude path when RRT fails
     /// </summary>
     private List<double3> BuildLowAltitudePath(double3 startLLH, double3 endLLH)
     {
         var path = new List<double3>();
 
-        // Calculate horizontal distance
+        double maxEndpointH = System.Math.Max(startLLH.z, endLLH.z);
+        double cruiseH = maxEndpointH + 10.0;
+
         double dLon = (endLLH.x - startLLH.x) * 111320.0 * System.Math.Cos(startLLH.y * System.Math.PI / 180.0);
         double dLat = (endLLH.y - startLLH.y) * 110540.0;
         double horizontalDist = System.Math.Sqrt(dLon * dLon + dLat * dLat);
 
-        // Target cruise altitude: just 10m above the higher endpoint
-        double maxEndpointH = System.Math.Max(startLLH.z, endLLH.z);
-        double cruiseH = maxEndpointH + 10.0; // Only 10m above endpoints
-
         if (horizontalDist < 200.0)
         {
-            // Short distance: direct path at a safe height
             double safeH = maxEndpointH + 5.0;
             path.Add(startLLH);
             path.Add(new double3(startLLH.x, startLLH.y, safeH));
@@ -254,23 +312,16 @@ public class RouteDispatcher : MonoBehaviour
         }
         else
         {
-            // Longer distance: gentle climb → cruise → descend
-            // Climb point: 20% into the route
-            double climbFrac = 0.15;
-            double descendFrac = 0.85;
-
             double3 climbPoint = new double3(
-                math.lerp(startLLH.x, endLLH.x, climbFrac),
-                math.lerp(startLLH.y, endLLH.y, climbFrac),
+                math.lerp(startLLH.x, endLLH.x, 0.15),
+                math.lerp(startLLH.y, endLLH.y, 0.15),
                 cruiseH
             );
-
             double3 descendPoint = new double3(
-                math.lerp(startLLH.x, endLLH.x, descendFrac),
-                math.lerp(startLLH.y, endLLH.y, descendFrac),
+                math.lerp(startLLH.x, endLLH.x, 0.85),
+                math.lerp(startLLH.y, endLLH.y, 0.85),
                 cruiseH
             );
-
             path.Add(startLLH);
             path.Add(climbPoint);
             path.Add(descendPoint);
@@ -299,6 +350,18 @@ public class RouteDispatcher : MonoBehaviour
         stop.actualArrival = simTime;
         stop.wasLate = stop.order != null && simTime > stop.order.dueTime;
         stop.isCompleted = true;
+        // 在 OnDroneSegmentCompleted 方法中，stop.isCompleted = true; 之后追加：
+
+        // Record to MissionTracker
+        if (stop.type == RouteStop.StopType.Delivery && MissionTracker.Instance != null)
+        {
+            var nav = droneInfo.navigator;
+            var spec = nav != null ? nav.GetComponent<DroneSpec>() : null;
+            int routeIdx = _routeIndices.ContainsKey(droneName) ? _routeIndices[droneName] : 0;
+
+            MissionTracker.Instance.RecordStopCompletion(
+                droneName, routeIdx, stopIdx, stop, spec, nav);
+        }
 
         // Unload cargo at delivery stop
         if (stop.type == RouteStop.StopType.Delivery && stop.order != null)
@@ -336,6 +399,13 @@ public class RouteDispatcher : MonoBehaviour
         {
             // Route complete!
             dispatch.route.isCompleted = true;
+            // 在 AdvanceToNextStop 方法中，dispatch.route.isCompleted = true; 之后追加：
+
+            if (MissionTracker.Instance != null && _routeIndices.ContainsKey(droneName))
+            {
+                MissionTracker.Instance.EndRoute(droneName, _routeIndices[droneName]);
+                _routeIndices.Remove(droneName);
+            }
             _activeDispatches.Remove(droneName);
 
             if (commandCenter.TryGetInfo(droneName, out var info))
