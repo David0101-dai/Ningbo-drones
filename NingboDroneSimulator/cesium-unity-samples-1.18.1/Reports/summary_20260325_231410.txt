@@ -1,0 +1,29 @@
+﻿=== Mission Summary ===
+Dataset: rc50
+Strategy: Greedy Insertion (100% Coverage) / Balanced
+
+Deliveries: 13
+On time: 3 (23.1%)
+Late: 10
+Avg lateness: 8.9 sim_time_units
+Max lateness: 25.8 sim_time_units
+
+=== Leg Statistics ===
+Total legs: 23
+Total straight-line distance: 39047m (39.0km)
+Total actual flown distance: 39634m (39.6km)
+Detour ratio: 1.02x (1.0 = no detour)
+Avg speed: 23.8 m/s
+
+=== Route Statistics ===
+Routes completed: 10/10
+Total distance (actual): 39634m (39.6km)
+Makespan: 218 sim_time_units
+Avg battery used per route: 2.7%
+
+=== Units Reference ===
+Distance: meters (m)
+Time: sim_time_units (Solomon abstract units)
+Speed: meters/second (m/s)
+Coordinates: WGS84 degrees (longitude, latitude)
+Altitude: meters above WGS84 ellipsoid

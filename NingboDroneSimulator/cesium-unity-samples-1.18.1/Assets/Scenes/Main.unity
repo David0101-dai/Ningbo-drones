@@ -8699,7 +8699,7 @@ GameObject:
   - component: {fileID: 592987246}
   - component: {fileID: 592987245}
   m_Layer: 5
-  m_Name: Timestop
+  m_Name: TimestopButton
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -11404,7 +11404,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 732539202}
-  - component: {fileID: 732539203}
   m_Layer: 5
   m_Name: PlanningPanel
   m_TagString: Untagged
@@ -11436,32 +11435,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 100.25, y: 454.9}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &732539203
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 732539201}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 59f8146938fff824cb5fd77236b75775, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_Padding:
-    m_Left: 0
-    m_Right: 0
-    m_Top: 0
-    m_Bottom: 0
-  m_ChildAlignment: 1
-  m_Spacing: 10
-  m_ChildForceExpandWidth: 1
-  m_ChildForceExpandHeight: 1
-  m_ChildControlWidth: 0
-  m_ChildControlHeight: 0
-  m_ChildScaleWidth: 0
-  m_ChildScaleHeight: 0
-  m_ReverseArrangement: 0
 --- !u!1 &747989406
 GameObject:
   m_ObjectHideFlags: 0
@@ -29812,7 +29785,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1926790146}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.16237728, y: -0.66469246, z: 0.15128925, w: 0.7133927}
+  m_LocalRotation: {x: 0.16177273, y: -0.6675318, z: 0.1519355, w: 0.71073663}
   m_LocalPosition: {x: -22.599625, y: -79.43978, z: -6.900478}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -32741,7 +32714,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2123498507}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.1623773, y: -0.66469246, z: 0.15128927, w: 0.7133927}
+  m_LocalRotation: {x: 0.16177273, y: -0.6675318, z: 0.15193552, w: 0.7107366}
   m_LocalPosition: {x: -22.599625, y: -79.43978, z: -6.900478}
   m_LocalScale: {x: 1.0000255, y: 1.0000006, z: 1.0000248}
   m_ConstrainProportionsScale: 0
@@ -32914,19 +32887,19 @@ MonoBehaviour:
   _detectTransformChanges: 0
   _localToGlobeFixedMatrix:
     c0:
-      x: 0.19978293630998484
-      y: -0.46031923275472336
-      z: 0.8650109926033169
+      x: 0.2067026143811289
+      y: -0.4563812593862962
+      z: 0.8654716416998688
       w: 0
     c1:
-      x: -0.033143414633513085
-      y: 0.8791056043712732
-      z: 0.4754745459827051
+      x: -0.03384492774923348
+      y: 0.8806875805413238
+      z: 0.47248819537485887
       w: 0
     c2:
-      x: 0.9793048046507269
-      y: 0.12366095943752564
-      z: -0.16037353664584364
+      x: 0.9778436038912031
+      y: 0.12695619668070968
+      z: -0.16659401842119145
       w: 0
     c3:
       x: -2896234.556993627

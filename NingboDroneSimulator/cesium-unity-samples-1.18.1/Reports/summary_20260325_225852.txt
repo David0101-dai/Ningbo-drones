@@ -1,0 +1,29 @@
+﻿=== Mission Summary ===
+Dataset: rc50
+Strategy: Balanced
+
+Deliveries: 17
+On time: 3 (17.6%)
+Late: 14
+Avg lateness: 55.8 sim_time_units
+Max lateness: 116.8 sim_time_units
+
+=== Leg Statistics ===
+Total legs: 27
+Total straight-line distance: 41519m (41.5km)
+Total actual flown distance: 42152m (42.2km)
+Detour ratio: 1.02x (1.0 = no detour)
+Avg speed: 12.9 m/s
+
+=== Route Statistics ===
+Routes completed: 10/10
+Total distance (actual): 42152m (42.2km)
+Makespan: 409 sim_time_units
+Avg battery used per route: 5.2%
+
+=== Units Reference ===
+Distance: meters (m)
+Time: sim_time_units (Solomon abstract units)
+Speed: meters/second (m/s)
+Coordinates: WGS84 degrees (longitude, latitude)
+Altitude: meters above WGS84 ellipsoid

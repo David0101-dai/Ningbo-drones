@@ -1,0 +1,11 @@
+﻿Drone,RouteIndex,CustomerCount,TotalDemand,VehicleCapacity,StartTime,EndTime,TotalTime,DistanceMeters,OnTimeCount,LateCount,TotalLateness,BatteryStartPct,BatteryEndPct,BatteryUsedPct,Strategy,Completed
+V01_1,1,2,30,200,97.6,237.3,139.7,3936,0,2,104.7,100.0,97.8,2.2,Balanced,True
+V02_2,2,2,30,200,97.6,242.8,145.2,4089,1,1,94.6,100.0,97.7,2.3,Balanced,True
+V03_3,3,2,50,200,97.6,234.4,136.8,3854,1,1,96.5,100.0,97.8,2.2,Balanced,True
+V04_4,4,2,30,200,97.6,258.0,160.4,4525,0,2,103.7,100.0,97.4,2.6,Balanced,True
+V05_5,5,2,40,200,97.6,248.0,150.4,4243,0,2,101.4,100.0,97.6,2.4,Balanced,True
+V06_6,6,1,40,200,97.6,250.6,153.1,4401,0,1,100.4,100.0,97.5,2.5,Balanced,True
+V07_7,7,1,10,200,97.6,232.8,135.3,3865,0,1,89.3,100.0,97.8,2.2,Balanced,True
+V08_8,8,2,40,200,97.6,231.6,134.0,3784,0,2,93.2,100.0,97.9,2.1,Balanced,True
+V09_9,9,1,10,200,97.6,279.7,182.1,5225,0,1,107.1,100.0,97.1,2.9,Balanced,True
+V10_10,10,2,30,200,97.6,246.6,149.1,4203,0,2,84.0,100.0,97.6,2.4,Balanced,True

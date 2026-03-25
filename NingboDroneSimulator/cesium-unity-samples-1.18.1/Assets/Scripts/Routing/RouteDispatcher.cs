@@ -7,7 +7,8 @@ using Unity.Mathematics;
 
 /// <summary>
 /// Dispatches planned routes to actual drones.
-/// Manages multi-stop execution: fly to stop → load/unload → fly to next stop.
+/// Supports MULTI-TRIP: when a drone finishes its route and returns to depot,
+/// it automatically picks up the next unassigned route.
 /// </summary>
 public class RouteDispatcher : MonoBehaviour
 {
@@ -35,17 +36,24 @@ public class RouteDispatcher : MonoBehaviour
     // ====== Active Dispatches ======
     private readonly Dictionary<string, ActiveDispatch> _activeDispatches = new();
 
+    // ====== Multi-Trip Queue ======
+    private readonly Queue<PlannedRoute> _pendingRoutes = new();
+    private int _totalRoutesPlanned = 0;
+    private int _totalRoutesCompleted = 0;
+
     // ====== Events ======
-    public System.Action<string, RouteStop, bool> OnStopCompleted; // droneName, stop, wasLate
-    public System.Action<string, PlannedRoute> OnRouteCompleted;    // droneName, route
+    public System.Action<string, RouteStop, bool> OnStopCompleted;
+    public System.Action<string, PlannedRoute> OnRouteCompleted;
     public System.Action<string> OnStatus;
 
     private class ActiveDispatch
     {
         public PlannedRoute route;
-        public int currentStopIndex;       // Which stop we're heading to
-        public bool isWaitingAtStop;       // Dwelling at current stop
+        public int currentStopIndex;
+        public bool isWaitingAtStop;
         public float dwellTimer;
+        public MissionTracker.LegRecord currentLeg;
+        public List<double3> currentLegPath;
     }
 
     void Awake()
@@ -60,13 +68,11 @@ public class RouteDispatcher : MonoBehaviour
 
     void Start()
     {
-        // Subscribe to drone route completion events
         SubscribeAllDrones();
     }
 
     void Update()
     {
-        // Update dwell timers and adaptive speed
         var keys = new List<string>(_activeDispatches.Keys);
         foreach (var droneName in keys)
         {
@@ -89,12 +95,9 @@ public class RouteDispatcher : MonoBehaviour
     }
 
     // ================================================================
-    //  Dispatch All Routes
+    //  Dispatch All Routes (with Multi-Trip Queue)
     // ================================================================
 
-    /// <summary>
-    /// Dispatch all planned routes. Each drone starts flying its route.
-    /// </summary>
     public int DispatchAll(List<PlannedRoute> routes)
     {
         if (routes == null || routes.Count == 0)
@@ -103,21 +106,53 @@ public class RouteDispatcher : MonoBehaviour
             return 0;
         }
 
+        _pendingRoutes.Clear();
+        _totalRoutesPlanned = routes.Count;
+        _totalRoutesCompleted = 0;
+
+        // Collect available drone names
+        var availableDrones = new Queue<string>();
+        foreach (var route in routes)
+        {
+            if (!string.IsNullOrEmpty(route.droneName) &&
+                !availableDrones.Contains(route.droneName))
+            {
+                availableDrones.Enqueue(route.droneName);
+            }
+        }
+
+        // If routes don't have drone names assigned, get from command center
+        if (availableDrones.Count == 0 && commandCenter != null)
+        {
+            foreach (var snap in commandCenter.GetFleetSnapshot())
+                availableDrones.Enqueue(snap.name);
+        }
+
         int dispatched = 0;
 
         foreach (var route in routes)
         {
-            if (DispatchRoute(route))
-                dispatched++;
+            if (availableDrones.Count > 0 &&
+                !_activeDispatches.ContainsKey(route.droneName))
+            {
+                // This drone is free — dispatch immediately
+                if (DispatchRoute(route))
+                    dispatched++;
+            }
+            else
+            {
+                // No free drone — queue for later
+                _pendingRoutes.Enqueue(route);
+            }
         }
 
-        EmitStatus($"[Dispatcher] Dispatched {dispatched}/{routes.Count} routes");
+        int queued = _pendingRoutes.Count;
+        EmitStatus($"[Dispatcher] Dispatched {dispatched}/{routes.Count} routes" +
+                   (queued > 0 ? $", {queued} queued for multi-trip" : ""));
+
         return dispatched;
     }
 
-    /// <summary>
-    /// Dispatch a single route to its assigned drone.
-    /// </summary>
     public bool DispatchRoute(PlannedRoute route)
     {
         if (route == null || route.stops.Count < 2) return false;
@@ -144,7 +179,7 @@ public class RouteDispatcher : MonoBehaviour
                 stop.order.status = DeliveryOrder.OrderStatus.Scheduled;
         }
 
-        // Load all cargo at depot before departure
+        // Load all cargo at depot
         var spec = nav.GetComponent<DroneSpec>();
         if (spec != null)
         {
@@ -164,12 +199,21 @@ public class RouteDispatcher : MonoBehaviour
         _activeDispatches[droneName] = new ActiveDispatch
         {
             route = route,
-            currentStopIndex = 1, // Start heading to first delivery (index 0 = depot start)
-            isWaitingAtStop = false
+            currentStopIndex = 1,
+            isWaitingAtStop = false,
+            currentLeg = null,
+            currentLegPath = null
         };
 
         route.isDispatched = true;
         route.currentStopIndex = 1;
+
+        // Register with MissionTracker
+        if (MissionTracker.Instance != null)
+        {
+            int routeIdx = MissionTracker.Instance.BeginRoute(droneName, route);
+            _routeIndices[droneName] = routeIdx;
+        }
 
         // Fly to first stop
         FlyToStop(droneName, route, 1);
@@ -177,19 +221,11 @@ public class RouteDispatcher : MonoBehaviour
         EmitStatus($"[Dispatcher] {droneName} dispatched: {route.customerCount} stops, " +
                    $"cargo={route.totalDemand}");
 
-        // Register with MissionTracker
-        if (MissionTracker.Instance != null)
-        {
-            int routeIdx = MissionTracker.Instance.BeginRoute(droneName, route);
-            // Store route index for later
-            _routeIndices[droneName] = routeIdx;
-        }
-
         return true;
     }
 
     /// <summary>
-    /// Clear all active dispatches. Call before importing new data.
+    /// Clear all active dispatches.
     /// </summary>
     public void ClearAll()
     {
@@ -200,14 +236,76 @@ public class RouteDispatcher : MonoBehaviour
                 nav.SetStop(DroneGeoNavigator.StopReason.External, true);
                 nav.SetStop(DroneGeoNavigator.StopReason.External, false);
             }
+            if (commandCenter != null && commandCenter.TryGetInfo(kvp.Key, out var info))
+                info.ClearMission();
         }
+
         _activeDispatches.Clear();
         _routeIndices.Clear();
+        _pendingRoutes.Clear();
+        _totalRoutesPlanned = 0;
+        _totalRoutesCompleted = 0;
+
+#if UNITY_2023_1_OR_NEWER
+        var allInfos = FindObjectsByType<DroneInfo>(
+            FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+        var allInfos = FindObjectsOfType<DroneInfo>(true);
+#endif
+        foreach (var info in allInfos)
+        {
+            if (info != null)
+                info.OnRouteCompleted -= OnDroneSegmentCompleted;
+        }
+
         Debug.Log("[Dispatcher] All dispatches cleared");
     }
 
     // ================================================================
-    //  Stop-by-Stop Execution
+    //  Multi-Trip: Assign Next Route to Idle Drone
+    // ================================================================
+
+    private void TryAssignNextRoute(string droneName)
+    {
+        if (_pendingRoutes.Count == 0)
+        {
+            Debug.Log($"[Dispatcher] {droneName} idle — no more routes in queue " +
+                      $"({_totalRoutesCompleted}/{_totalRoutesPlanned} completed)");
+
+            // Check if all routes are done
+            if (_totalRoutesCompleted >= _totalRoutesPlanned &&
+                _activeDispatches.Count == 0)
+            {
+                EmitStatus($"[Dispatcher] ALL {_totalRoutesPlanned} routes completed!");
+            }
+            return;
+        }
+
+        // Get next route from queue
+        var nextRoute = _pendingRoutes.Dequeue();
+
+        // Reassign drone name to this route
+        nextRoute.droneName = droneName;
+
+        Debug.Log($"[Dispatcher] {droneName} picking up next route: " +
+                  $"{nextRoute.customerCount} customers, demand={nextRoute.totalDemand} " +
+                  $"({_pendingRoutes.Count} remaining in queue)");
+
+        // Reset drone speed to planning speed
+        if (commandCenter.TryGetNav(droneName, out var nav))
+        {
+            float planSpeed = VehicleRouter.Instance != null
+                ? VehicleRouter.Instance.GetPlanningSpeed()
+                : 15f;
+            nav.SetCruiseSpeed(planSpeed);
+        }
+
+        // Dispatch!
+        DispatchRoute(nextRoute);
+    }
+
+    // ================================================================
+    //  Stop-by-Stop Execution (with Leg Recording)
     // ================================================================
 
     private void FlyToStop(string droneName, PlannedRoute route, int stopIndex)
@@ -222,48 +320,85 @@ public class RouteDispatcher : MonoBehaviour
         double3 currentLLH = anchor.longitudeLatitudeHeight;
         double3 targetLLH = route.stops[stopIndex].locationLLH;
 
-        // Try RuntimeWaypointsBuilder first (with collision avoidance)
+        // Determine origin name
+        string originName;
+        if (stopIndex == 0 ||
+            (stopIndex == 1 && route.stops[0].type == RouteStop.StopType.Depot))
+            originName = route.stops[0].order?.deliveryPointName ?? "Depot";
+        else
+        {
+            var prevStop = route.stops[stopIndex - 1];
+            originName = prevStop.type == RouteStop.StopType.Depot
+                ? "Depot"
+                : $"C{prevStop.order?.customerNumber:D3}";
+        }
+
+        // Determine destination name
+        var targetStop = route.stops[stopIndex];
+        string destName = targetStop.type == RouteStop.StopType.Depot
+            ? "Depot"
+            : $"C{targetStop.order?.customerNumber:D3}";
+
+        // Build flight path
+        List<double3> flightPath = null;
         bool routeBuilt = false;
+
         if (routeBuilder != null)
         {
-            // Temporarily enforce low altitude limits
             float origCruiseOffset = routeBuilder.cruiseHeightOffset;
             float origHeightStep = routeBuilder.heightStep;
             int origMaxRetries = routeBuilder.maxHeightRetries;
 
-            // Clamp: max cruise = endpoint height + 15m, max retry = 3 steps of 5m
             routeBuilder.cruiseHeightOffset = 10f;
             routeBuilder.heightStep = 5f;
             routeBuilder.maxHeightRetries = 3;
 
-            if (routeBuilder.BuildRoute(currentLLH, targetLLH, out var llhPath))
+            if (routeBuilder.BuildRoute(currentLLH, targetLLH, out flightPath))
             {
-                if (llhPath.Count > 0)
-                    llhPath[0] = currentLLH;
+                if (flightPath.Count > 0)
+                    flightPath[0] = currentLLH;
 
-                // Cap all waypoint heights to prevent excessive altitude
-                double maxAllowedHeight = System.Math.Max(currentLLH.z, targetLLH.z) + 20.0;
-                for (int i = 0; i < llhPath.Count; i++)
+                double maxAllowedHeight =
+                    System.Math.Max(currentLLH.z, targetLLH.z) + 20.0;
+                for (int i = 0; i < flightPath.Count; i++)
                 {
-                    if (llhPath[i].z > maxAllowedHeight)
-                        llhPath[i] = new double3(llhPath[i].x, llhPath[i].y, maxAllowedHeight);
+                    if (flightPath[i].z > maxAllowedHeight)
+                        flightPath[i] = new double3(
+                            flightPath[i].x, flightPath[i].y, maxAllowedHeight);
                 }
 
-                nav.InjectPath(llhPath, startNow: true);
+                nav.InjectPath(flightPath, startNow: true);
                 routeBuilt = true;
             }
 
-            // Restore original values
             routeBuilder.cruiseHeightOffset = origCruiseOffset;
             routeBuilder.heightStep = origHeightStep;
             routeBuilder.maxHeightRetries = origMaxRetries;
         }
 
-        // Fallback: simple low-altitude path if route builder fails
         if (!routeBuilt)
         {
-            var path = BuildLowAltitudePath(currentLLH, targetLLH);
-            nav.InjectPath(path, startNow: true);
+            flightPath = BuildLowAltitudePath(currentLLH, targetLLH);
+            nav.InjectPath(flightPath, startNow: true);
+        }
+
+        // ====== BEGIN LEG RECORDING ======
+        if (MissionTracker.Instance != null &&
+            _activeDispatches.TryGetValue(droneName, out var dispatch))
+        {
+            var spec = nav.GetComponent<DroneSpec>();
+            int routeIdx = _routeIndices.ContainsKey(droneName)
+                ? _routeIndices[droneName] : 0;
+            int legIdx = stopIndex - 1;
+
+            dispatch.currentLeg = MissionTracker.Instance.BeginLeg(
+                droneName, routeIdx, legIdx,
+                originName, currentLLH,
+                destName, targetLLH,
+                flightPath,
+                spec, nav
+            );
+            dispatch.currentLegPath = flightPath;
         }
 
         // Update DroneInfo
@@ -272,7 +407,8 @@ public class RouteDispatcher : MonoBehaviour
             var stop = route.stops[stopIndex];
             string routeLabel = stop.type == RouteStop.StopType.Depot
                 ? "Return to Depot"
-                : $"→ C{stop.order?.customerNumber:D3} ({stopIndex}/{route.stops.Count - 2})";
+                : $"→ C{stop.order?.customerNumber:D3} " +
+                  $"({stopIndex}/{route.stops.Count - 2})";
             info.AssignRoute(routeLabel);
         }
 
@@ -284,13 +420,11 @@ public class RouteDispatcher : MonoBehaviour
             currentStop.order.assignedDrone = droneName;
         }
 
-        Debug.Log($"[Dispatcher] {droneName} flying to stop {stopIndex}: {route.stops[stopIndex]} " +
-                $"(RRT={routeBuilt})");
+        Debug.Log($"[Dispatcher] {droneName} flying to stop {stopIndex}: " +
+                  $"{originName}→{destName} " +
+                  $"(path={flightPath?.Count ?? 0} wps, RRT={routeBuilt})");
     }
 
-    /// <summary>
-    /// Fallback: simple low-altitude path when RRT fails
-    /// </summary>
     private List<double3> BuildLowAltitudePath(double3 startLLH, double3 endLLH)
     {
         var path = new List<double3>();
@@ -298,7 +432,8 @@ public class RouteDispatcher : MonoBehaviour
         double maxEndpointH = System.Math.Max(startLLH.z, endLLH.z);
         double cruiseH = maxEndpointH + 10.0;
 
-        double dLon = (endLLH.x - startLLH.x) * 111320.0 * System.Math.Cos(startLLH.y * System.Math.PI / 180.0);
+        double dLon = (endLLH.x - startLLH.x) * 111320.0 *
+                      System.Math.Cos(startLLH.y * System.Math.PI / 180.0);
         double dLat = (endLLH.y - startLLH.y) * 110540.0;
         double horizontalDist = System.Math.Sqrt(dLon * dLon + dLat * dLat);
 
@@ -315,13 +450,11 @@ public class RouteDispatcher : MonoBehaviour
             double3 climbPoint = new double3(
                 math.lerp(startLLH.x, endLLH.x, 0.15),
                 math.lerp(startLLH.y, endLLH.y, 0.15),
-                cruiseH
-            );
+                cruiseH);
             double3 descendPoint = new double3(
                 math.lerp(startLLH.x, endLLH.x, 0.85),
                 math.lerp(startLLH.y, endLLH.y, 0.85),
-                cruiseH
-            );
+                cruiseH);
             path.Add(startLLH);
             path.Add(climbPoint);
             path.Add(descendPoint);
@@ -346,18 +479,34 @@ public class RouteDispatcher : MonoBehaviour
         var stop = route.stops[stopIdx];
 
         // Record actual arrival
-        float simTime = SimClock.Instance != null ? SimClock.Instance.SimTime : Time.time;
+        float simTime = SimClock.Instance != null
+            ? SimClock.Instance.SimTime : Time.time;
         stop.actualArrival = simTime;
         stop.wasLate = stop.order != null && simTime > stop.order.dueTime;
         stop.isCompleted = true;
-        // 在 OnDroneSegmentCompleted 方法中，stop.isCompleted = true; 之后追加：
 
-        // Record to MissionTracker
+        // ====== END LEG RECORDING ======
+        if (MissionTracker.Instance != null && dispatch.currentLeg != null)
+        {
+            var nav = droneInfo.navigator;
+            var spec = nav != null ? nav.GetComponent<DroneSpec>() : null;
+
+            MissionTracker.Instance.EndLeg(
+                dispatch.currentLeg,
+                spec,
+                stop.order
+            );
+            dispatch.currentLeg = null;
+            dispatch.currentLegPath = null;
+        }
+
+        // Record stop to MissionTracker
         if (stop.type == RouteStop.StopType.Delivery && MissionTracker.Instance != null)
         {
             var nav = droneInfo.navigator;
             var spec = nav != null ? nav.GetComponent<DroneSpec>() : null;
-            int routeIdx = _routeIndices.ContainsKey(droneName) ? _routeIndices[droneName] : 0;
+            int routeIdx = _routeIndices.ContainsKey(droneName)
+                ? _routeIndices[droneName] : 0;
 
             MissionTracker.Instance.RecordStopCompletion(
                 droneName, routeIdx, stopIdx, stop, spec, nav);
@@ -374,20 +523,21 @@ public class RouteDispatcher : MonoBehaviour
                 spec.currentLoad -= unloaded;
             }
 
-            // Mark order completed
             stop.order.status = DeliveryOrder.OrderStatus.Completed;
             stop.order.completedTime = simTime;
 
             string lateStr = stop.wasLate ? " [LATE!]" : " [ON TIME]";
-            EmitStatus($"{droneName} delivered to C{stop.order.customerNumber:D3}{lateStr} " +
+            EmitStatus($"{droneName} delivered to " +
+                       $"C{stop.order.customerNumber:D3}{lateStr} " +
                        $"(cargo remaining: {spec?.currentLoad ?? 0})");
 
             OnStopCompleted?.Invoke(droneName, stop, stop.wasLate);
         }
 
-        // Start dwell timer (simulates unloading)
+        // Start dwell timer
         dispatch.isWaitingAtStop = true;
-        dispatch.dwellTimer = stop.type == RouteStop.StopType.Depot ? 0.5f : stopDwellTimeSeconds;
+        dispatch.dwellTimer = stop.type == RouteStop.StopType.Depot
+            ? 0.5f : stopDwellTimeSeconds;
     }
 
     private void AdvanceToNextStop(string droneName, ActiveDispatch dispatch)
@@ -397,13 +547,17 @@ public class RouteDispatcher : MonoBehaviour
 
         if (dispatch.currentStopIndex >= dispatch.route.stops.Count)
         {
-            // Route complete!
+            // ═══════════════════════════════════════
+            //  Current route complete!
+            // ═══════════════════════════════════════
             dispatch.route.isCompleted = true;
-            // 在 AdvanceToNextStop 方法中，dispatch.route.isCompleted = true; 之后追加：
+            _totalRoutesCompleted++;
 
-            if (MissionTracker.Instance != null && _routeIndices.ContainsKey(droneName))
+            if (MissionTracker.Instance != null &&
+                _routeIndices.ContainsKey(droneName))
             {
-                MissionTracker.Instance.EndRoute(droneName, _routeIndices[droneName]);
+                MissionTracker.Instance.EndRoute(
+                    droneName, _routeIndices[droneName]);
                 _routeIndices.Remove(droneName);
             }
             _activeDispatches.Remove(droneName);
@@ -411,8 +565,17 @@ public class RouteDispatcher : MonoBehaviour
             if (commandCenter.TryGetInfo(droneName, out var info))
                 info.ClearMission();
 
-            EmitStatus($"[Dispatcher] {droneName} completed all {dispatch.route.customerCount} deliveries!");
+            EmitStatus($"[Dispatcher] {droneName} completed all " +
+                       $"{dispatch.route.customerCount} deliveries! " +
+                       $"({_totalRoutesCompleted}/{_totalRoutesPlanned} routes done)");
+
             OnRouteCompleted?.Invoke(droneName, dispatch.route);
+
+            // ═══════════════════════════════════════
+            //  MULTI-TRIP: Try to pick up next route
+            // ═══════════════════════════════════════
+            TryAssignNextRoute(droneName);
+
             return;
         }
 
@@ -435,49 +598,45 @@ public class RouteDispatcher : MonoBehaviour
         var targetStop = route.stops[stopIdx];
         if (targetStop.order == null) return;
 
-        // Get current position
         var anchor = nav.GetComponent<CesiumForUnity.CesiumGlobeAnchor>();
         if (anchor == null) return;
 
         double3 currentLLH = anchor.longitudeLatitudeHeight;
         double3 targetLLH = targetStop.locationLLH;
 
-        // Calculate remaining distance
         double remainingDist = GeoDistanceMeters(currentLLH, targetLLH);
 
-        // Calculate time budget
-        float simTime = SimClock.Instance != null ? SimClock.Instance.SimTime : Time.time;
+        float simTime = SimClock.Instance != null
+            ? SimClock.Instance.SimTime : Time.time;
         float deadline = targetStop.order.dueTime;
         float timeRemaining = deadline - simTime;
 
         if (timeRemaining <= 0)
         {
-            // Already late, go max speed
             var spec = nav.GetComponent<DroneSpec>();
             if (spec != null)
                 nav.SetCruiseSpeed(spec.maxSpeed);
             return;
         }
 
-        // ETA at current speed
         float currentSpeed = (float)nav.cruiseSpeed;
         float eta = (float)(remainingDist / currentSpeed);
 
-        // If ETA > timeRemaining * warningFactor, speed up
         if (eta > timeRemaining * lateWarningFactor)
         {
-            // Calculate needed speed
-            float neededSpeed = (float)(remainingDist / (timeRemaining * 0.9f)); // 10% safety margin
-
+            float neededSpeed =
+                (float)(remainingDist / (timeRemaining * 0.9f));
             var spec = nav.GetComponent<DroneSpec>();
             float maxSpeed = spec != null ? (float)spec.maxSpeed : 30f;
             float newSpeed = Mathf.Min(neededSpeed, maxSpeed);
 
-            if (newSpeed > currentSpeed * 1.1f) // Only adjust if significant
+            if (newSpeed > currentSpeed * 1.1f)
             {
                 nav.SetCruiseSpeed(newSpeed);
-                Debug.Log($"[Dispatcher] {droneName} speeding up: {currentSpeed:F1} → {newSpeed:F1} m/s " +
-                          $"(deadline in {timeRemaining:F0}s, ETA was {eta:F0}s)");
+                Debug.Log($"[Dispatcher] {droneName} speeding up: " +
+                          $"{currentSpeed:F1} → {newSpeed:F1} m/s " +
+                          $"(deadline in {timeRemaining:F0}s, " +
+                          $"ETA was {eta:F0}s)");
             }
         }
     }
@@ -487,14 +646,19 @@ public class RouteDispatcher : MonoBehaviour
     // ================================================================
 
     public int ActiveDispatchCount => _activeDispatches.Count;
+    public int PendingRouteCount => _pendingRoutes.Count;
+    public int TotalRoutesCompleted => _totalRoutesCompleted;
+    public int TotalRoutesPlanned => _totalRoutesPlanned;
 
     public string GetDispatchStatus()
     {
-        if (_activeDispatches.Count == 0)
+        if (_activeDispatches.Count == 0 && _pendingRoutes.Count == 0)
             return "No active dispatches";
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"Active dispatches: {_activeDispatches.Count}");
+        sb.AppendLine($"Routes: {_totalRoutesCompleted}/{_totalRoutesPlanned} done, " +
+                      $"{_activeDispatches.Count} active, " +
+                      $"{_pendingRoutes.Count} queued");
 
         foreach (var kvp in _activeDispatches)
         {
@@ -502,7 +666,8 @@ public class RouteDispatcher : MonoBehaviour
             int completed = d.route.stops.Count(s => s.isCompleted);
             int total = d.route.DeliveryStopCount;
             int late = d.route.stops.Count(s => s.wasLate);
-            sb.AppendLine($"  {kvp.Key}: {completed}/{total} delivered, {late} late");
+            sb.AppendLine(
+                $"  {kvp.Key}: {completed}/{total} delivered, {late} late");
         }
 
         return sb.ToString();
@@ -515,7 +680,8 @@ public class RouteDispatcher : MonoBehaviour
     private void SubscribeAllDrones()
     {
 #if UNITY_2023_1_OR_NEWER
-        var infos = FindObjectsByType<DroneInfo>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        var infos = FindObjectsByType<DroneInfo>(
+            FindObjectsInactive.Include, FindObjectsSortMode.None);
 #else
         var infos = FindObjectsOfType<DroneInfo>(true);
 #endif
@@ -526,7 +692,6 @@ public class RouteDispatcher : MonoBehaviour
         }
     }
 
-    /// <summary>Call after new drones are spawned</summary>
     public void SubscribeDrone(DroneInfo info)
     {
         info.OnRouteCompleted -= OnDroneSegmentCompleted;
@@ -535,7 +700,8 @@ public class RouteDispatcher : MonoBehaviour
 
     private double GeoDistanceMeters(double3 a, double3 b)
     {
-        double dLon = (b.x - a.x) * 111320.0 * System.Math.Cos(a.y * System.Math.PI / 180.0);
+        double dLon = (b.x - a.x) * 111320.0 *
+                      System.Math.Cos(a.y * System.Math.PI / 180.0);
         double dLat = (b.y - a.y) * 110540.0;
         return System.Math.Sqrt(dLon * dLon + dLat * dLat);
     }

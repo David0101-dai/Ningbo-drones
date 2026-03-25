@@ -6,9 +6,11 @@ using System.Collections.Generic;
 
 /// <summary>
 /// Simulation speed control UI.
-/// Sets Time.timeScale for drone movement speed AND
-/// SimClock.simSpeedMultiplier for simulation time tracking.
-/// Both use the SAME multiplier value to stay in sync.
+///
+/// ONLY sets Time.timeScale. This single mechanism controls:
+/// - Drone flight speed (DroneGeoNavigator uses Time.deltaTime)
+/// - Simulation clock (SimClock uses Time.deltaTime)
+/// - Both are perfectly synchronized at any speed.
 /// </summary>
 public class SimSpeedController : MonoBehaviour
 {
@@ -27,6 +29,12 @@ public class SimSpeedController : MonoBehaviour
     {
         SetupDropdown();
         SetupPauseButton();
+
+        // Raise maximumDeltaTime to allow high timeScale values
+        // Default is 0.333s which clips at timeScale > ~16x
+        // Setting to 1.0 allows up to 50x without clipping
+        Time.maximumDeltaTime = 1.0f;
+
         UpdateLabel();
     }
 
@@ -83,15 +91,18 @@ public class SimSpeedController : MonoBehaviour
     {
         if (_isPaused) return;
 
-        // Time.timeScale controls Unity physics/movement (drones fly faster)
+        // Time.timeScale is the ONLY speed mechanism.
+        // DroneGeoNavigator uses Time.deltaTime → automatically scaled.
+        // SimClock uses Time.deltaTime → automatically scaled.
+        // Both experience the same maximumDeltaTime clamping → stay in sync.
         Time.timeScale = multiplier;
 
-        // SimClock uses unscaledDeltaTime * multiplier (no double counting)
+        // Tell SimClock the multiplier for display purposes only
         if (SimClock.Instance != null)
             SimClock.Instance.SetSpeed(multiplier);
 
         UpdateLabel();
-        Debug.Log($"[SimSpeed] Set to {multiplier}x");
+        Debug.Log($"[SimSpeed] Set to {multiplier}x (timeScale={Time.timeScale})");
     }
 
     // ════════════════════════════════════

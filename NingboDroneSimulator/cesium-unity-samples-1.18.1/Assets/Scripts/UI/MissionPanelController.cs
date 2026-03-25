@@ -782,7 +782,7 @@ public class MissionPanelController : MonoBehaviour
     {
         if (_router == null || _router.LastSolution == null || _router.LastSolution.Count == 0)
         {
-            SetOutput("[FAIL] No routes to dispatch.\\nClick 'Solve Routes' first.");
+            SetOutput("[FAIL] No routes to dispatch.\nClick 'Solve Routes' first.");
             return;
         }
 
@@ -792,21 +792,32 @@ public class MissionPanelController : MonoBehaviour
             return;
         }
 
-        // Start mission tracking
+        // ====== KEY FIX: Reset SimClock to 0 at dispatch time ======
+        // The clock was running since import, accumulating "idle" time.
+        // Routes are planned with departure time = 0, so we must reset.
+        if (SimClock.Instance != null)
+        {
+            SimClock.Instance.StartSimulation(0f);
+            Debug.Log("[MissionPanel] SimClock reset to 0 at dispatch time");
+        }
+
+        // Start mission tracking (now records startTime = 0)
         if (MissionTracker.Instance != null)
         {
             string datasetName = _solomonImporter?.CurrentDataset?.name ?? "Unknown";
-            string strategy = _router.strategy.ToString();
-            MissionTracker.Instance.StartMission(datasetName, strategy);
+            string solverName = SolverRegistry.Instance?.ActiveSolver?.Name ?? "Unknown";
+            string strategyStr = $"{solverName} / {_router.strategy}";
+            MissionTracker.Instance.StartMission(datasetName, strategyStr);
         }
 
         int count = _dispatcher.DispatchAll(_router.LastSolution);
 
         if (count > 0)
-            SetOutput($"[OK] Dispatched {count} routes!\\n\\n{_dispatcher.GetDispatchStatus()}");
+            SetOutput($"[OK] Dispatched {count} routes!\n\n{_dispatcher.GetDispatchStatus()}");
         else
             SetOutput("[FAIL] Failed to dispatch routes. Check console.");
     }
+
 
     private void OnStopAll()
     {

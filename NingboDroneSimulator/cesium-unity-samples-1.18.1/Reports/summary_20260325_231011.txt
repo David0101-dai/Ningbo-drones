@@ -1,0 +1,29 @@
+﻿=== Mission Summary ===
+Dataset: rc50
+Strategy: Solomon I1 Insertion / Balanced
+
+Deliveries: 33
+On time: 18 (54.5%)
+Late: 15
+Avg lateness: 15.7 sim_time_units
+Max lateness: 71.5 sim_time_units
+
+=== Leg Statistics ===
+Total legs: 43
+Total straight-line distance: 45434m (45.4km)
+Total actual flown distance: 46194m (46.2km)
+Detour ratio: 1.02x (1.0 = no detour)
+Avg speed: 24.9 m/s
+
+=== Route Statistics ===
+Routes completed: 10/10
+Total distance (actual): 46194m (46.2km)
+Makespan: 239 sim_time_units
+Avg battery used per route: 3.1%
+
+=== Units Reference ===
+Distance: meters (m)
+Time: sim_time_units (Solomon abstract units)
+Speed: meters/second (m/s)
+Coordinates: WGS84 degrees (longitude, latitude)
+Altitude: meters above WGS84 ellipsoid

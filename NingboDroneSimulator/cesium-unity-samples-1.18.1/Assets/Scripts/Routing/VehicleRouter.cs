@@ -67,11 +67,10 @@ public class VehicleRouter : MonoBehaviour
             return new List<PlannedRoute>();
         }
 
-        // Get active solver
         IRoutingSolver solver = GetActiveSolver();
         if (solver == null)
         {
-            EmitStatus("[Router] No solver available! Check SolverRegistry.");
+            EmitStatus("[Router] No solver available!");
             return new List<PlannedRoute>();
         }
 
@@ -85,16 +84,21 @@ public class VehicleRouter : MonoBehaviour
         }
 
         EmitStatus($"[Router] Solving with '{solver.Name}': {pending.Count} orders, " +
-                   $"{fleet.Count} drones (cap={vehicleCapacity}, speed={speedForPlanning:F1}m/s)");
+                $"{fleet.Count} drones (cap={vehicleCapacity}, speed={speedForPlanning:F1}m/s)");
 
-        // Build context
         RoutingContext ctx = BuildContext(pending, fleet, depotLLH, vehicleCapacity, speedForPlanning);
 
-        // Apply Solomon-specific parameters if the active solver is SolomonI1
         ApplySolomonParams(solver);
 
         // ★ Call the solver ★
         var routes = solver.Solve(ctx);
+
+        // ════════════════════════════════════════════════
+        //  SAFETY NET: Ensure 100% customer coverage
+        //  If the solver left some customers unrouted,
+        //  force them into existing or new routes.
+        // ════════════════════════════════════════════════
+        routes = EnsureFullCoverage(routes, ctx, pending);
 
         // Assign drone names
         AssignDroneNames(routes, fleet);
@@ -102,11 +106,12 @@ public class VehicleRouter : MonoBehaviour
         // Store results
         _lastSolution = routes;
         _lastRouteCount = routes.Count;
-        _lastUnrouted = pending.Count - routes.Sum(r => r.DeliveryStopCount);
+        _lastUnrouted = 0; // Guaranteed by EnsureFullCoverage
+
+        int totalRouted = routes.Sum(r => r.DeliveryStopCount);
 
         string summary = $"[Router] {solver.Name}: {routes.Count} routes, " +
-                         $"{routes.Sum(r => r.DeliveryStopCount)}/{pending.Count} routed, " +
-                         $"{_lastUnrouted} unrouted";
+                        $"{totalRouted}/{pending.Count} routed";
         EmitStatus(summary);
         Debug.Log(summary);
 
@@ -115,6 +120,273 @@ public class VehicleRouter : MonoBehaviour
 
         OnRoutesPlanned?.Invoke(routes);
         return routes;
+    }
+
+    // ================================================================
+    //  Safety Net: Force 100% Coverage
+    // ================================================================
+
+    /// <summary>
+    /// After any solver runs, check if all customers are routed.
+    /// If not, force-insert the missing ones into existing routes
+    /// or create new overflow routes.
+    /// This guarantees no customer is ever dropped.
+    /// </summary>
+    private List<PlannedRoute> EnsureFullCoverage(
+        List<PlannedRoute> routes, RoutingContext ctx, List<DeliveryOrder> allOrders)
+    {
+        // Find which orders are already routed
+        var routedOrders = new HashSet<DeliveryOrder>();
+        foreach (var route in routes)
+        {
+            foreach (var stop in route.stops)
+            {
+                if (stop.type == RouteStop.StopType.Delivery && stop.order != null)
+                    routedOrders.Add(stop.order);
+            }
+        }
+
+        // Find unrouted orders
+        var unrouted = new List<int>();
+        for (int i = 0; i < ctx.orders.Count; i++)
+        {
+            if (!routedOrders.Contains(ctx.orders[i]))
+                unrouted.Add(i);
+        }
+
+        if (unrouted.Count == 0)
+        {
+            Debug.Log($"[Router SafetyNet] All {ctx.orders.Count} customers routed by solver ✓");
+            return routes;
+        }
+
+        Debug.LogWarning($"[Router SafetyNet] Solver left {unrouted.Count}/{ctx.orders.Count} " +
+                        $"customers unrouted! Force-inserting...");
+
+        // Try to insert into existing routes (cheapest position, ignore TW)
+        var stillUnrouted = new List<int>();
+
+        foreach (int custIdx in unrouted)
+        {
+            var order = ctx.orders[custIdx];
+            bool inserted = false;
+
+            // Find route with enough capacity and cheapest insertion
+            float bestCost = float.MaxValue;
+            PlannedRoute bestRoute = null;
+            int bestPos = -1;
+
+            foreach (var route in routes)
+            {
+                if (route.totalDemand + order.demand > route.vehicleCapacity)
+                    continue;
+
+                // Try each position (skip depot at start and end)
+                for (int pos = 1; pos < route.stops.Count; pos++)
+                {
+                    int prevMI = GetMatrixIndex(route.stops[pos - 1], ctx);
+                    int nextMI = GetMatrixIndex(
+                        route.stops[Mathf.Min(pos, route.stops.Count - 1)], ctx);
+                    int newMI = custIdx + 1;
+
+                    float cost = ctx.distanceMatrix[prevMI, newMI] +
+                                ctx.distanceMatrix[newMI, nextMI] -
+                                ctx.distanceMatrix[prevMI, nextMI];
+
+                    if (cost < bestCost)
+                    {
+                        bestCost = cost;
+                        bestRoute = route;
+                        bestPos = pos;
+                    }
+                }
+            }
+
+            if (bestRoute != null)
+            {
+                // Remove trailing depot, insert, re-add depot
+                bestRoute.stops.RemoveAt(bestRoute.stops.Count - 1);
+
+                var stop = ctx.MakeDeliveryStop(order);
+                bestRoute.stops.Insert(bestPos, stop);
+                bestRoute.totalDemand += order.demand;
+
+                bestRoute.stops.Add(ctx.MakeDepotStop());
+
+                // Recalculate timing
+                RecalcTiming(bestRoute, ctx);
+                bestRoute.customerCount = bestRoute.DeliveryStopCount;
+                bestRoute.totalDistance = CalcRouteDistance(bestRoute, ctx);
+
+                inserted = true;
+
+                Debug.Log($"[Router SafetyNet] Inserted C{order.customerNumber:D3} " +
+                        $"into existing route (pos={bestPos}, demand={order.demand})");
+            }
+
+            if (!inserted)
+                stillUnrouted.Add(custIdx);
+        }
+
+        // Create overflow routes for any remaining
+        while (stillUnrouted.Count > 0)
+        {
+            var overflowRoute = new PlannedRoute
+            {
+                vehicleCapacity = ctx.vehicleCapacity,
+                totalDemand = 0
+            };
+            overflowRoute.stops.Add(ctx.MakeDepotStop(0));
+
+            float currentTime = 0;
+            int lastMI = 0;
+            var toRemove = new List<int>();
+
+            foreach (int custIdx in stillUnrouted)
+            {
+                var order = ctx.orders[custIdx];
+                if (overflowRoute.totalDemand + order.demand > ctx.vehicleCapacity)
+                    continue;
+
+                int custMI = custIdx + 1;
+                float travel = ctx.distanceMatrix[lastMI, custMI] / ctx.speedMps;
+                currentTime += travel;
+
+                var stop = ctx.MakeDeliveryStop(order);
+                stop.plannedArrival = currentTime;
+                stop.waitUntil = order.readyTime;
+                stop.serviceStart = Mathf.Max(currentTime, order.readyTime);
+                stop.serviceEnd = stop.serviceStart + order.serviceTime;
+                stop.plannedDeparture = stop.serviceEnd;
+                stop.wasLate = currentTime > order.dueTime;
+
+                overflowRoute.stops.Add(stop);
+                overflowRoute.totalDemand += order.demand;
+
+                currentTime = stop.plannedDeparture;
+                lastMI = custMI;
+                toRemove.Add(custIdx);
+            }
+
+            foreach (var idx in toRemove)
+                stillUnrouted.Remove(idx);
+
+            // Return to depot
+            float returnTravel = ctx.distanceMatrix[lastMI, 0] / ctx.speedMps;
+            overflowRoute.stops.Add(ctx.MakeDepotStop(currentTime + returnTravel));
+            overflowRoute.customerCount = overflowRoute.DeliveryStopCount;
+            overflowRoute.totalTime = currentTime + returnTravel;
+            overflowRoute.totalDistance = CalcRouteDistance(overflowRoute, ctx);
+
+            routes.Add(overflowRoute);
+
+            Debug.Log($"[Router SafetyNet] Created overflow route: " +
+                    $"{overflowRoute.customerCount} customers, " +
+                    $"demand={overflowRoute.totalDemand}");
+
+            // Safety: if nothing was added (shouldn't happen), break
+            if (toRemove.Count == 0)
+            {
+                // Absolute last resort: one route per customer
+                foreach (int custIdx in stillUnrouted)
+                {
+                    var order = ctx.orders[custIdx];
+                    var solo = new PlannedRoute
+                    {
+                        vehicleCapacity = ctx.vehicleCapacity,
+                        totalDemand = order.demand
+                    };
+
+                    solo.stops.Add(ctx.MakeDepotStop(0));
+
+                    float t = ctx.distanceMatrix[0, custIdx + 1] / ctx.speedMps;
+                    var s = ctx.MakeDeliveryStop(order);
+                    s.plannedArrival = t;
+                    s.serviceStart = Mathf.Max(t, order.readyTime);
+                    s.serviceEnd = s.serviceStart + order.serviceTime;
+                    s.plannedDeparture = s.serviceEnd;
+                    s.wasLate = t > order.dueTime;
+                    solo.stops.Add(s);
+
+                    float ret = ctx.distanceMatrix[custIdx + 1, 0] / ctx.speedMps;
+                    solo.stops.Add(ctx.MakeDepotStop(s.plannedDeparture + ret));
+                    solo.customerCount = 1;
+                    solo.totalTime = s.plannedDeparture + ret;
+                    solo.totalDistance = ctx.distanceMatrix[0, custIdx + 1] +
+                                        ctx.distanceMatrix[custIdx + 1, 0];
+
+                    routes.Add(solo);
+                    Debug.LogWarning($"[Router SafetyNet] EMERGENCY solo route for " +
+                                    $"C{order.customerNumber:D3}");
+                }
+                stillUnrouted.Clear();
+            }
+        }
+
+        int finalCount = routes.Sum(r => r.DeliveryStopCount);
+        Debug.Log($"[Router SafetyNet] Final: {finalCount}/{ctx.orders.Count} customers " +
+                $"in {routes.Count} routes");
+
+        return routes;
+    }
+
+    // ================================================================
+    //  Helpers for SafetyNet
+    // ================================================================
+
+    private void RecalcTiming(PlannedRoute route, RoutingContext ctx)
+    {
+        if (route.stops.Count < 2) return;
+        route.stops[0].plannedArrival = 0;
+        route.stops[0].plannedDeparture = 0;
+
+        for (int i = 1; i < route.stops.Count; i++)
+        {
+            int prev = GetMatrixIndex(route.stops[i - 1], ctx);
+            int curr = GetMatrixIndex(route.stops[i], ctx);
+            float travel = ctx.timeMatrix[prev, curr];
+            float arrival = route.stops[i - 1].plannedDeparture + travel;
+
+            route.stops[i].plannedArrival = arrival;
+
+            if (route.stops[i].type == RouteStop.StopType.Delivery &&
+                route.stops[i].order != null)
+            {
+                var order = route.stops[i].order;
+                route.stops[i].waitUntil = order.readyTime;
+                route.stops[i].serviceStart = Mathf.Max(arrival, order.readyTime);
+                route.stops[i].serviceEnd =
+                    route.stops[i].serviceStart + order.serviceTime;
+                route.stops[i].plannedDeparture = route.stops[i].serviceEnd;
+                route.stops[i].wasLate = arrival > order.dueTime;
+            }
+            else
+            {
+                route.stops[i].plannedDeparture = arrival;
+            }
+        }
+
+        route.totalTime = route.stops[route.stops.Count - 1].plannedArrival;
+    }
+
+    private float CalcRouteDistance(PlannedRoute route, RoutingContext ctx)
+    {
+        float total = 0;
+        for (int i = 0; i < route.stops.Count - 1; i++)
+        {
+            int a = GetMatrixIndex(route.stops[i], ctx);
+            int b = GetMatrixIndex(route.stops[i + 1], ctx);
+            total += ctx.distanceMatrix[a, b];
+        }
+        return total;
+    }
+
+    private int GetMatrixIndex(RouteStop stop, RoutingContext ctx)
+    {
+        if (stop.type == RouteStop.StopType.Depot) return 0;
+        if (stop.order == null) return 0;
+        int idx = ctx.orders.IndexOf(stop.order);
+        return idx >= 0 ? idx + 1 : 0;
     }
 
     // ================================================================

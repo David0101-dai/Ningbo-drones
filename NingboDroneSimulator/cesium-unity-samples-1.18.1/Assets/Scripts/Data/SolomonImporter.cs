@@ -263,30 +263,31 @@ public class SolomonImporter : MonoBehaviour
         c.height = uniformHeight;
     }
 
-    // ================================================================
-    //  Step 2: Clear Existing Data
-    // ================================================================
 
-    // 替换 SolomonImporter.cs 中的 ClearExistingData 方法：
+
+    // ================================================================
+    //  Step 2: Clear Existing Data (FIXED)
+    // ================================================================
 
     private void ClearExistingData()
     {
-        // 1. Clear route dispatcher state FIRST (before destroying drones)
-        var dispatcher = FindObjectOfType<RouteDispatcher>();
-        if (dispatcher != null)
-            dispatcher.ClearAll();
+        EmitStatus("Clearing previous simulation data...");
+
+        // 1. Clear route dispatcher state FIRST (stops all active flights)
+        if (RouteDispatcher.Instance != null)
+            RouteDispatcher.Instance.ClearAll();
 
         // 2. Clear VehicleRouter last solution
         if (VehicleRouter.Instance != null)
         {
-            // Clear cached solution so OrderManager doesn't skip auto-assign
             var field = typeof(VehicleRouter).GetField("_lastSolution",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Instance);
             if (field != null)
                 field.SetValue(VehicleRouter.Instance, null);
         }
 
-        // 3. Clear all orders
+        // 3. Clear all orders (also stops drones with active orders)
         if (orderManager != null)
             orderManager.ClearAllOrders();
 
@@ -294,91 +295,40 @@ public class SolomonImporter : MonoBehaviour
         if (MissionTracker.Instance != null)
             MissionTracker.Instance.StartMission("", "");
 
-        // 5. Remove ALL drones
+        // 5. Remove ALL drones using the new immediate method
+        //    This handles both factory-spawned AND pre-placed drones.
+        //    No need for a separate RemovePreplacedDrones() anymore.
         if (droneFactory != null)
         {
-            var names = new List<string>(droneFactory.GetDroneNames());
-            foreach (var name in names)
-                droneFactory.RemoveDrone(name);
+            int removed = droneFactory.RemoveAllDronesImmediate();
+            droneFactory.ResetCounter();
+            EmitStatus($"Removed {removed} drones");
         }
 
-        // Also remove pre-placed drones
-        RemovePreplacedDrones();
-
-        // 6. Reset drone counter so next import starts from V01
-        if (droneFactory != null)
-            droneFactory.ResetCounter();
-
-        // 7. Remove Solomon-created location points
+        // 6. Remove Solomon-created location points
+        //    (Depot_xxx and Cxxx points from previous import)
         if (locationManager != null)
         {
-            locationManager.RemovePointsWhere(p =>
+            int pointsRemoved = locationManager.RemovePointsWhere(p =>
             {
                 string n = p.GetDisplayName();
                 return n.StartsWith("Depot_") ||
-                    (n.StartsWith("C") && n.Length == 4 && int.TryParse(n.Substring(1), out _));
+                    (n.StartsWith("C") && n.Length == 4 &&
+                    int.TryParse(n.Substring(1), out _));
             });
+            EmitStatus($"Removed {pointsRemoved} location points");
         }
 
-        // 8. Reset SimClock
+        // 7. Reset SimClock
         if (SimClock.Instance != null)
             SimClock.Instance.StopSimulation();
 
-        // 9. Reset speed to 1x
+        // 8. Reset speed to 1x
         var speedController = FindObjectOfType<SimSpeedController>();
         if (speedController != null)
             speedController.ResetSpeed();
 
-        EmitStatus("Cleared all drones, orders, and Solomon points");
-    }
-
-    /// <summary>
-    /// Find and destroy any pre-placed drone GameObjects that exist
-    /// under the CesiumGeoreference but weren't spawned by DroneFactory.
-    /// </summary>
-    private void RemovePreplacedDrones()
-    {
-    #if UNITY_2023_1_OR_NEWER
-        var allInfos = FindObjectsByType<DroneInfo>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-    #else
-        var allInfos = FindObjectsOfType<DroneInfo>(true);
-    #endif
-
-        var switchView = FindObjectOfType<SwitchView>();
-
-        foreach (var info in allInfos)
-        {
-            if (info == null) continue;
-
-            string droneName = info.GetName();
-            EmitStatus($"Removing pre-placed drone: {droneName}");
-
-            // Unsubscribe
-            if (OrderManager.Instance != null)
-                OrderManager.Instance.UnsubscribeDrone(info);
-
-            // Remove camera target
-            if (switchView != null)
-            {
-                Transform camTarget = info.transform.Find("CamTarget");
-                if (camTarget != null)
-                {
-                    var list = new List<Transform>(switchView.droneTargets ?? new Transform[0]);
-                    list.Remove(camTarget);
-                    switchView.droneTargets = list.ToArray();
-                }
-            }
-
-            // Stop navigator
-            var nav = info.navigator;
-            if (nav != null)
-                nav.SetStop(DroneGeoNavigator.StopReason.External, true);
-
-            Destroy(info.gameObject);
-        }
-
-        // Refresh after destroy
-        StartCoroutine(RefreshAfterClear());
+        EmitStatus("Clear complete — ready for new import");
     }
 
     private System.Collections.IEnumerator RefreshAfterClear()

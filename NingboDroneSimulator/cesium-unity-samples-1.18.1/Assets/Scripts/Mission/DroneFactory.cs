@@ -32,10 +32,121 @@ public class DroneFactory : MonoBehaviour
         if (!georeference) georeference = FindObjectOfType<CesiumGeoreference>();
     }
 
+    // ================================================================
+    //  Reset (for re-import scenarios)
+    // ================================================================
+
+    /// <summary>
+    /// Reset the drone counter so next spawn starts from V01.
+    /// Call this when clearing all drones before a new import.
+    /// </summary>
+    public void ResetCounter()
+    {
+        _droneCounter = 0;
+        Debug.Log("[DroneFactory] Counter reset to 0");
+    }
+
+    /// <summary>
+    /// Remove ALL drones immediately (uses DestroyImmediate in Editor,
+    /// batched Destroy in builds). Returns count of removed drones.
+    /// Call this instead of RemoveDrone() in a loop when you need
+    /// all drones gone before spawning new ones in the SAME frame.
+    /// </summary>
+    public int RemoveAllDronesImmediate()
+    {
+        // Find all DroneInfo in scene
+#if UNITY_2023_1_OR_NEWER
+        var allInfos = FindObjectsByType<DroneInfo>(
+            FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+        var allInfos = FindObjectsOfType<DroneInfo>(true);
+#endif
+
+        var switchView = FindObjectOfType<SwitchView>();
+        int count = 0;
+
+        foreach (var info in allInfos)
+        {
+            if (info == null) continue;
+
+            // Unsubscribe from OrderManager
+            if (OrderManager.Instance != null)
+                OrderManager.Instance.UnsubscribeDrone(info);
+
+            // Unsubscribe from RouteDispatcher
+            if (RouteDispatcher.Instance != null)
+            {
+                info.OnRouteCompleted -= null; // Will be cleaned up on destroy
+            }
+
+            // Remove camera target from SwitchView
+            if (switchView != null)
+            {
+                Transform camTarget = info.transform.Find("CamTarget");
+                if (camTarget != null)
+                {
+                    var list = new List<Transform>(
+                        switchView.droneTargets ?? new Transform[0]);
+                    list.Remove(camTarget);
+                    switchView.droneTargets = list.ToArray();
+                }
+            }
+
+            // Stop navigator to prevent any in-flight callbacks
+            var nav = info.navigator;
+            if (nav != null)
+            {
+                nav.SetStop(DroneGeoNavigator.StopReason.External, true);
+                nav.enabled = false;
+            }
+
+            // Destroy the GameObject
+            GameObject go = info.gameObject;
+
+#if UNITY_EDITOR
+            // In Editor, DestroyImmediate ensures the object is gone
+            // before we proceed to spawn new drones
+            if (!Application.isPlaying)
+                DestroyImmediate(go);
+            else
+                Destroy(go);
+#else
+            Destroy(go);
+#endif
+
+            count++;
+        }
+
+        // Clear SwitchView targets completely
+        if (switchView != null)
+        {
+            switchView.droneTargets = new Transform[0];
+            if (switchView.sideView)
+            {
+                switchView.sideView.Follow = null;
+                switchView.sideView.LookAt = null;
+            }
+            if (switchView.rearChase)
+            {
+                switchView.rearChase.Follow = null;
+                switchView.rearChase.LookAt = null;
+            }
+        }
+
+        // Refresh CommandCenter
+        if (commandCenter != null)
+            commandCenter.Refresh();
+
+        Debug.Log($"[DroneFactory] Removed {count} drones (immediate)");
+        return count;
+    }
+
+    // ================================================================
+    //  Spawn
+    // ================================================================
+
     /// <summary>
     /// Spawn a new drone at the given spawn point.
-    /// The drone is placed under CesiumGeoreference, registered with
-    /// CommandCenter, SwitchView, and OrderManager.
     /// </summary>
     public GameObject SpawnDrone(string droneName, string spawnPointName, Color pathColor)
     {
@@ -64,7 +175,8 @@ public class DroneFactory : MonoBehaviour
 
         if (spawnPoint == null)
         {
-            Debug.LogError("[DroneFactory] No spawn point available");
+            Debug.LogError($"[DroneFactory] No spawn point available " +
+                           $"(looking for '{spawnPointName}')");
             return null;
         }
 
@@ -73,7 +185,19 @@ public class DroneFactory : MonoBehaviour
         if (string.IsNullOrEmpty(droneName))
             droneName = $"Drone_{_droneCounter:D2}";
 
-        // ====== Instantiate under CesiumRoot (CRITICAL for CesiumGlobeAnchor) ======
+        // ====== Check for duplicate names ======
+        if (commandCenter != null)
+        {
+            commandCenter.Refresh();
+            if (commandCenter.TryGetInfo(droneName, out _))
+            {
+                Debug.LogWarning($"[DroneFactory] Drone '{droneName}' already exists! " +
+                                 $"Appending counter suffix.");
+                droneName = $"{droneName}_{_droneCounter}";
+            }
+        }
+
+        // ====== Instantiate under CesiumRoot ======
         GameObject drone = Instantiate(dronePrefab, georeference.transform);
         drone.name = $"UAV_{droneName}";
 
@@ -91,10 +215,6 @@ public class DroneFactory : MonoBehaviour
             nav.cruiseSpeed = defaultSpeed;
             nav.pathGizmoColor = pathColor;
             nav.startupDelay = 0f;
-
-            // DO NOT set waypointsParent — the drone will receive
-            // paths via InjectPath from OrderManager.
-            // Start() now handles waypointsParent == null gracefully.
             nav.waypointsParent = null;
         }
 
@@ -108,15 +228,14 @@ public class DroneFactory : MonoBehaviour
             StartCoroutine(SetIdleNextFrame(info));
         }
 
-        // ====== Configure DroneSpec (新增) ======
+        // ====== Configure DroneSpec ======
         var droneSpec = drone.GetComponent<DroneSpec>();
         if (droneSpec == null)
             droneSpec = drone.AddComponent<DroneSpec>();
-        droneSpec.maxCapacity = 200;    // Solomon default
+        droneSpec.maxCapacity = 200;
         droneSpec.currentLoad = 0;
         droneSpec.ResetFull();
 
-        // Link DroneInfo to DroneSpec
         if (info != null)
             info.spec = droneSpec;
 
@@ -127,7 +246,6 @@ public class DroneFactory : MonoBehaviour
             Transform camTarget = drone.transform.Find("CamTarget");
             if (camTarget == null)
             {
-                // Create CamTarget if prefab doesn't have one
                 var ct = new GameObject("CamTarget");
                 ct.transform.SetParent(drone.transform, false);
                 ct.transform.localPosition = new Vector3(0, 2, 0);
@@ -144,52 +262,18 @@ public class DroneFactory : MonoBehaviour
         if (OrderManager.Instance != null && info != null)
             OrderManager.Instance.SubscribeDrone(info);
 
-        // Diagnostic: verify drone state after spawn
-        StartCoroutine(DiagnoseAfterSpawn(droneName));
+        // ====== Subscribe to RouteDispatcher ======
+        if (RouteDispatcher.Instance != null && info != null)
+            RouteDispatcher.Instance.SubscribeDrone(info);
 
-        Debug.Log($"[DroneFactory] Spawned '{droneName}' at {spawnPoint.GetDisplayName()} under {georeference.name}");
+        Debug.Log($"[DroneFactory] Spawned '{droneName}' at " +
+                  $"{spawnPoint.GetDisplayName()} under {georeference.name}");
         return drone;
     }
 
-    /// <summary>
-    /// Reset drone counter. Call before re-importing a new dataset.
-    /// </summary>
-    public void ResetCounter()
-    {
-        _droneCounter = 0;
-        Debug.Log("[DroneFactory] Counter reset to 0");
-    }
-
-    private System.Collections.IEnumerator DiagnoseAfterSpawn(string droneName)
-    {
-        // Wait 2 frames for all Start() and coroutines to complete
-        yield return null;
-        yield return null;
-
-        if (commandCenter == null) yield break;
-        commandCenter.Refresh(); // Re-scan after Start() has run
-
-        if (commandCenter.TryGetInfo(droneName, out var info))
-        {
-            var nav = info.navigator;
-            Debug.Log($"[DroneFactory DIAG] '{droneName}': " +
-                      $"IsIdle={info.IsIdle()}, " +
-                      $"MissionState={info.missionState}, " +
-                      $"HasNoPath={nav?.HasNoPath()}, " +
-                      $"Progress={nav?.GetProgress():F1}%, " +
-                      $"NavEnabled={nav?.enabled}, " +
-                      $"Subscribed={OrderManager.Instance != null}");
-        }
-        else
-        {
-            Debug.LogWarning($"[DroneFactory DIAG] '{droneName}' NOT FOUND in CommandCenter! " +
-                             $"Available: {string.Join(", ", commandCenter.GetAllDroneNames())}");
-        }
-
-        // Also check idle drones list
-        var idleList = commandCenter.GetIdleDrones();
-        Debug.Log($"[DroneFactory DIAG] Idle drones: [{string.Join(", ", idleList)}]");
-    }
+    // ================================================================
+    //  Remove Single Drone
+    // ================================================================
 
     /// <summary>
     /// Remove a drone from the scene completely.
@@ -198,11 +282,9 @@ public class DroneFactory : MonoBehaviour
     {
         if (commandCenter == null) return false;
 
-        // Try to find by display name first, then by object name
         DroneInfo info = null;
         if (!commandCenter.TryGetInfo(droneName, out info))
         {
-            // Also try with "UAV_" prefix
             if (!commandCenter.TryGetInfo($"UAV_{droneName}", out info))
             {
                 Debug.LogWarning($"[DroneFactory] Drone '{droneName}' not found");
@@ -210,7 +292,7 @@ public class DroneFactory : MonoBehaviour
             }
         }
 
-        // ====== Cancel active orders ======
+        // Cancel active orders
         if (OrderManager.Instance != null)
         {
             string infoName = info.GetName();
@@ -228,7 +310,7 @@ public class DroneFactory : MonoBehaviour
             }
         }
 
-        // ====== Remove camera target from SwitchView ======
+        // Remove camera target from SwitchView
         var switchView = FindObjectOfType<SwitchView>();
         if (switchView != null)
         {
@@ -237,7 +319,7 @@ public class DroneFactory : MonoBehaviour
                 RemoveDroneFromSwitchView(switchView, camTarget);
         }
 
-        // ====== Destroy ======
+        // Destroy
         GameObject droneObj = info.gameObject;
         string displayName = info.GetName();
         Destroy(droneObj);
@@ -250,7 +332,6 @@ public class DroneFactory : MonoBehaviour
 
     /// <summary>
     /// Get list of drone display names for UI dropdowns.
-    /// Returns unique names only.
     /// </summary>
     public List<string> GetDroneNames()
     {
@@ -271,13 +352,16 @@ public class DroneFactory : MonoBehaviour
     {
         if (sv == null || camTarget == null) return;
 
-        // Convert array to list, add, convert back
+        // Clean nulls first
+        sv.CleanNullTargets();
+
         var list = new List<Transform>(sv.droneTargets ?? new Transform[0]);
         if (!list.Contains(camTarget))
         {
             list.Add(camTarget);
             sv.droneTargets = list.ToArray();
-            Debug.Log($"[DroneFactory] Camera target added (total: {sv.droneTargets.Length})");
+            Debug.Log($"[DroneFactory] Camera target added " +
+                      $"(total: {sv.droneTargets.Length})");
         }
     }
 
@@ -290,11 +374,12 @@ public class DroneFactory : MonoBehaviour
         {
             sv.droneTargets = list.ToArray();
 
-            // If currently following this drone, switch to first available
-            if (sv.CurrentDroneTarget == camTarget && sv.droneTargets.Length > 0)
+            if (sv.CurrentDroneTarget == camTarget &&
+                sv.droneTargets.Length > 0)
                 sv.SelectDroneByIndex(0);
 
-            Debug.Log($"[DroneFactory] Camera target removed (total: {sv.droneTargets.Length})");
+            Debug.Log($"[DroneFactory] Camera target removed " +
+                      $"(total: {sv.droneTargets.Length})");
         }
     }
 
@@ -304,7 +389,7 @@ public class DroneFactory : MonoBehaviour
 
     private IEnumerator SetIdleNextFrame(DroneInfo info)
     {
-        yield return null; // Wait one frame for Start() to finish
+        yield return null;
         if (info != null)
         {
             info.missionState = DroneInfo.MissionState.Idle;
@@ -318,5 +403,4 @@ public class DroneFactory : MonoBehaviour
         if (commandCenter != null)
             commandCenter.Refresh();
     }
-    
 }

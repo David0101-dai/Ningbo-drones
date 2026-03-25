@@ -7,6 +7,7 @@ using UnityEngine;
 
 /// <summary>
 /// Exports mission data to CSV files for analysis.
+/// Now exports 4 files: stops, routes, legs, and summary.
 /// </summary>
 public class MissionReportExporter : MonoBehaviour
 {
@@ -25,10 +26,6 @@ public class MissionReportExporter : MonoBehaviour
     //  Export All Reports
     // ================================================================
 
-    /// <summary>
-    /// Export both stop-level and route-level CSV reports.
-    /// Returns the folder path where files were saved.
-    /// </summary>
     public string ExportAll()
     {
         if (MissionTracker.Instance == null)
@@ -44,15 +41,18 @@ public class MissionReportExporter : MonoBehaviour
 
         string stopsFile = Path.Combine(folder, $"stops_{timestamp}.csv");
         string routesFile = Path.Combine(folder, $"routes_{timestamp}.csv");
+        string legsFile = Path.Combine(folder, $"legs_{timestamp}.csv");
         string summaryFile = Path.Combine(folder, $"summary_{timestamp}.txt");
 
         int stopsCount = ExportStopsCSV(stopsFile);
         int routesCount = ExportRoutesCSV(routesFile);
+        int legsCount = ExportLegsCSV(legsFile);
         ExportSummary(summaryFile);
 
         string msg = $"[Exporter] Exported to {folder}:\\n" +
                      $"  stops_{timestamp}.csv ({stopsCount} records)\\n" +
                      $"  routes_{timestamp}.csv ({routesCount} records)\\n" +
+                     $"  legs_{timestamp}.csv ({legsCount} records)\\n" +
                      $"  summary_{timestamp}.txt";
 
         Debug.Log(msg);
@@ -60,7 +60,7 @@ public class MissionReportExporter : MonoBehaviour
     }
 
     // ================================================================
-    //  Stops CSV
+    //  Stops CSV (existing, unchanged)
     // ================================================================
 
     public int ExportStopsCSV(string filePath)
@@ -70,7 +70,6 @@ public class MissionReportExporter : MonoBehaviour
 
         var sb = new StringBuilder();
 
-        // Header
         sb.AppendLine("Drone,RouteIndex,StopIndex,CustomerNo,Demand," +
                       "PlannedArrival,ActualArrival,ReadyTime,DueTime,ServiceTime," +
                       "OnTime,Late,Lateness,WaitTime," +
@@ -95,7 +94,7 @@ public class MissionReportExporter : MonoBehaviour
     }
 
     // ================================================================
-    //  Routes CSV
+    //  Routes CSV (existing, unchanged)
     // ================================================================
 
     public int ExportRoutesCSV(string filePath)
@@ -128,6 +127,70 @@ public class MissionReportExporter : MonoBehaviour
     }
 
     // ================================================================
+    //  Legs CSV (NEW — detailed per-segment flight data)
+    // ================================================================
+
+    public int ExportLegsCSV(string filePath)
+    {
+        var records = MissionTracker.Instance.LegRecords;
+        if (records.Count == 0) return 0;
+
+        var sb = new StringBuilder();
+
+        // Header with full detail
+        sb.AppendLine(
+            "Drone,RouteIndex,LegIndex," +
+            "OriginName,OriginLongitude_deg,OriginLatitude_deg,OriginAltitude_mWGS84," +
+            "DestName,DestLongitude_deg,DestLatitude_deg,DestAltitude_mWGS84," +
+            "StraightLineDist_m,ActualFlownDist_m,DetourRatio,WaypointCount," +
+            "DepartureSimTime,ArrivalSimTime,LegDuration_simUnits," +
+            "CruiseSpeed_mps,AvgSpeed_mps," +
+            "DepartBattery_pct,ArriveBattery_pct," +
+            "DepartCargo,ArriveCargo," +
+            "DestReadyTime,DestDueTime,ArrivedOnTime," +
+            "DistanceUnit,TimeUnit,SpeedUnit,AltitudeUnit,CoordSystem"
+        );
+
+        foreach (var l in records)
+        {
+            float detourRatio = l.straightLineDistM > 0
+                ? l.actualFlownDistM / l.straightLineDistM
+                : 1f;
+
+            sb.AppendLine(
+                $"{l.droneName},{l.routeIndex},{l.legIndex}," +
+
+                $"{l.originName},{l.originLongitude:F6},{l.originLatitude:F6}," +
+                $"{l.originAltitude:F1}," +
+
+                $"{l.destName},{l.destLongitude:F6},{l.destLatitude:F6}," +
+                $"{l.destAltitude:F1}," +
+
+                $"{l.straightLineDistM:F1},{l.actualFlownDistM:F1}," +
+                $"{detourRatio:F3},{l.waypointCount}," +
+
+                $"{l.departureSimTime:F2},{l.arrivalSimTime:F2}," +
+                $"{l.legDurationSimTime:F2}," +
+
+                $"{l.cruiseSpeedMps:F1},{l.avgSpeedMps:F1}," +
+
+                $"{l.departBatteryPct:F1},{l.arriveBatteryPct:F1}," +
+                $"{l.departCargoLoad},{l.arriveCargoLoad}," +
+
+                $"{l.destReadyTime:F1},{l.destDueTime:F1}," +
+                $"{(l.arrivedOnTime ? "YES" : "NO")}," +
+
+                $"{l.distanceUnit},{l.timeUnit},{l.speedUnit}," +
+                $"{l.altitudeUnit},{l.coordSystem}"
+            );
+        }
+
+        File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
+        Debug.Log($"[Exporter] Legs CSV: {records.Count} records written");
+        return records.Count;
+    }
+
+    // ================================================================
     //  Summary Text
     // ================================================================
 
@@ -141,23 +204,14 @@ public class MissionReportExporter : MonoBehaviour
     //  Helpers
     // ================================================================
 
-    // Assets/Scripts/Routing/MissionReportExporter.cs
-
     private string GetExportFolder()
     {
-        // Save to project folder (next to Assets/) instead of C:\Users\...\AppData
-        // In editor: D:\desk\FYP\Ningbo-drones\NingboDroneSimulator\...\Reports\
-        // In build: next to the .exe file
-        
-        #if UNITY_EDITOR
-            // Editor: save next to Assets folder
-            string projectRoot = System.IO.Path.GetDirectoryName(Application.dataPath);
-            return System.IO.Path.Combine(projectRoot, exportFolder);
-        #else
-            // Build: save next to the .exe
-            string exeDir = System.IO.Path.GetDirectoryName(Application.dataPath);
-            return System.IO.Path.Combine(exeDir, exportFolder);
-        #endif
+#if UNITY_EDITOR
+        string projectRoot = Path.GetDirectoryName(Application.dataPath);
+        return Path.Combine(projectRoot, exportFolder);
+#else
+        string exeDir = Path.GetDirectoryName(Application.dataPath);
+        return Path.Combine(exeDir, exportFolder);
+#endif
     }
-
 }
