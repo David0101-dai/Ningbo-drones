@@ -106,6 +106,10 @@ public class RouteDispatcher : MonoBehaviour
             return 0;
         }
 
+        // ★ FIX: Auto-save previous session and start new one for this mission
+        if (Logger.Instance != null)
+            Logger.Instance.PrepareForNewMission();
+
         _pendingRoutes.Clear();
         _totalRoutesPlanned = routes.Count;
         _totalRoutesCompleted = 0;

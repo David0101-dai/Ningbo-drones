@@ -82,14 +82,22 @@ public class SwitchView : MonoBehaviour
             EnsureCameraHasTarget();
         }
 
-        if (UIInputBlocker.IsBlocking) return;
+        // ★ FIX: During replay, allow view/drone/info-panel hotkeys
+        // even when the Replay UI panel is open (UIInputBlocker active).
+        bool isReplaying = ReplayManager.Instance != null &&
+                        ReplayManager.Instance.IsReplaying;
 
-        if (UnityEngine.EventSystems.EventSystem.current != null &&
-            UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject != null)
+        if (!isReplaying)
         {
-            var inputField = UnityEngine.EventSystems.EventSystem.current
-                .currentSelectedGameObject.GetComponent<TMPro.TMP_InputField>();
-            if (inputField != null) return;
+            if (UIInputBlocker.IsBlocking) return;
+
+            if (UnityEngine.EventSystems.EventSystem.current != null &&
+                UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject != null)
+            {
+                var inputField = UnityEngine.EventSystems.EventSystem.current
+                    .currentSelectedGameObject.GetComponent<TMPro.TMP_InputField>();
+                if (inputField != null) return;
+            }
         }
 
         // --- View mode ---

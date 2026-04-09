@@ -696,6 +696,26 @@ public class DroneGeoNavigator : MonoBehaviour
     public static bool GlobalPathVisible => _globalPathVisible;
 
     /// <summary>
+    /// Inject a pre-built path purely for OnRenderObject visualization.
+    /// Does NOT densify, does NOT affect movement or replay position.
+    /// Intended for ghost drones in replay mode: lets them show path lines.
+    /// </summary>
+    public void SetVisualizationPath(List<double3> llhPath)
+    {
+        if (llhPath == null || llhPath.Count < 2) return;
+
+        _pathLLH.Clear();
+        _pathLLH.AddRange(llhPath);
+        _segmentIndex = 0;       // Draw from beginning to end
+        _tOnSegment = 0.0;
+
+        // Do NOT call ForceStartNow or modify _isStarted —
+        // isInReplayMode guards LateUpdate so movement is unaffected.
+        if (showProgressLogs)
+            Debug.Log($"{_logPrefix} SetVisualizationPath: {_pathLLH.Count} points loaded");
+    }
+
+    /// <summary>
     /// Toggle path line visibility for ALL drones
     /// </summary>
     public static void ToggleAllPathLines()

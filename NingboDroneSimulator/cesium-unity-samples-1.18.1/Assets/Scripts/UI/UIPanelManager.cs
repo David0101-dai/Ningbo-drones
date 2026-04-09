@@ -1,4 +1,4 @@
-// Assets/Scripts/UIPanelManager.cs
+// Assets/Scripts/UI/UIPanelManager.cs
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -12,7 +12,7 @@ public class UIPanelManager : MonoBehaviour
     [Header("=== Panels ===")]
     [SerializeField] private GameObject defaultPanel;
     [SerializeField] private GameObject planningPanel;
-    [SerializeField] private GameObject replayPanel;        
+    [SerializeField] private GameObject replayPanel;
     [SerializeField] private TMP_Text outputText;
 
     // ================================================================
@@ -24,11 +24,11 @@ public class UIPanelManager : MonoBehaviour
     [SerializeField] private Button pauseAllButton;
     [SerializeField] private Button resumeAllButton;
     [SerializeField] private Button enterPlanningButton;
-    [SerializeField] private Button enterReplayButton;      
+    [SerializeField] private Button enterReplayButton;
     [SerializeField] private Button saveLogButton;
 
     // ================================================================
-    //  Planning Mode UI（保持不变）
+    //  Planning Mode UI
     // ================================================================
     [Header("=== Planning Mode UI ===")]
     [SerializeField] private Button exitPlanningButton;
@@ -40,7 +40,7 @@ public class UIPanelManager : MonoBehaviour
     [SerializeField] private TMP_Text statusText;
 
     // ================================================================
-    //  Replay Mode UI（全新）
+    //  Replay Mode UI
     // ================================================================
     [Header("=== Replay Mode UI ===")]
     [SerializeField] private Button exitReplayButton;
@@ -50,7 +50,7 @@ public class UIPanelManager : MonoBehaviour
     [SerializeField] private Button pauseReplayButton;
     [SerializeField] private Button stopReplayButton;
     [SerializeField] private TMP_Dropdown speedDropdown;
-    [SerializeField] private Button saveLogInReplayButton;  
+    [SerializeField] private Button saveLogInReplayButton;
 
     [Header("=== Mission Mode ===")]
     [SerializeField] private GameObject missionPanel;
@@ -88,7 +88,6 @@ public class UIPanelManager : MonoBehaviour
     public string droneDropdownName   = "DroneDropdown";
     public string statusTextName      = "StatusText";
     public string saveLogName         = "SaveLogButton";
-    // Replay
     public string logFileDropdownName     = "LogFileDropdown";
     public string replayDroneDropdownName = "ReplayDroneDropdown";
     public string startReplayName         = "StartReplayButton";
@@ -98,18 +97,17 @@ public class UIPanelManager : MonoBehaviour
     public string saveLogInReplayName     = "SaveLogButton2";
 
     // ================================================================
-    //  Replay 内部状态
+    //  Replay internal state
     // ================================================================
     private List<(string fileName, string fullPath)> _logFiles = new();
     private readonly float[] _speedOptions = { 0.25f, 0.5f, 1f, 2f, 4f, 8f };
-    private int _selectedSpeedIndex = 2; // 默认 1x
+    private int _selectedSpeedIndex = 2;
 
     // ================================================================
     //  Awake
     // ================================================================
     void Awake()
     {
-        // ---------- 自动查找 Controllers ----------
         if (!planningController) planningController = FindObjectOfType<PlanningModeController>();
         if (!picker) picker = FindObjectOfType<MapPickController>();
         if (!commandCenter) commandCenter = FindObjectOfType<DroneCommandCenter>();
@@ -117,15 +115,12 @@ public class UIPanelManager : MonoBehaviour
         if (!applyRouteController) applyRouteController = FindObjectOfType<ApplyRuntimeRouteController>();
         if (!llm) llm = FindObjectOfType<LLMManagerHttp>();
 
-        // ---------- 自动查找 UI 元素 ----------
-        // Default
         if (!enterPlanningButton) enterPlanningButton = FindButton(enterPlanningName);
         if (!enterReplayButton)   enterReplayButton   = FindButton(enterReplayName);
         if (!pauseAllButton)      pauseAllButton      = FindButton(pauseAllName);
         if (!resumeAllButton)     resumeAllButton     = FindButton(resumeAllName);
         if (!saveLogButton)       saveLogButton       = FindButton(saveLogName);
 
-        // Planning
         if (!exitPlanningButton)  exitPlanningButton  = FindButton(exitPlanningName);
         if (!pickStartButton)     pickStartButton     = FindButton(pickStartName);
         if (!pickEndButton)       pickEndButton       = FindButton(pickEndName);
@@ -134,7 +129,6 @@ public class UIPanelManager : MonoBehaviour
         if (!droneDropdown)       droneDropdown       = FindDropdown(droneDropdownName);
         if (!statusText)          statusText          = FindTMPText(statusTextName);
 
-        // Replay
         if (!exitReplayButton)      exitReplayButton      = FindButton(exitReplayName);
         if (!logFileDropdown)       logFileDropdown       = FindDropdown(logFileDropdownName);
         if (!replayDroneDropdown)   replayDroneDropdown   = FindDropdown(replayDroneDropdownName);
@@ -144,39 +138,32 @@ public class UIPanelManager : MonoBehaviour
         if (!speedDropdown)         speedDropdown         = FindDropdown(speedDropdownName);
         if (!saveLogInReplayButton) saveLogInReplayButton = FindButton(saveLogInReplayName);
 
-        // Mission
         if (!enterMissionButton) enterMissionButton = FindButton("EnterMissionButton");
         if (!exitMissionButton) exitMissionButton = FindButton("ExitMissionButton");
 
-        // ---------- 面板初始状态 ----------
         if (defaultPanel)  defaultPanel.SetActive(true);
         if (planningPanel) planningPanel.SetActive(false);
         if (replayPanel)   replayPanel.SetActive(false);
-        if (missionPanel) missionPanel.SetActive(false);
+        if (missionPanel)  missionPanel.SetActive(false);
 
-        // ---------- 绑定事件 ----------
         BindDefaultEvents();
         BindPlanningEvents();
         BindReplayEvents();
 
-        // ---------- LLM 输出绑定 ----------
         if (llm && outputText) llm.outputText = outputText;
 
-        // ---------- ReplayManager 状态回调 ----------
         if (ReplayManager.Instance != null)
         {
             ReplayManager.Instance.OnStatusChanged += OnReplayStatusChanged;
             ReplayManager.Instance.OnReplayFinished += OnReplayFinished;
         }
 
-        // ---------- 初始刷新 ----------
         RefreshPlanningDropdown();
         RefreshPlanningStatus();
     }
 
     void OnDestroy()
     {
-        // 清理事件订阅
         if (ReplayManager.Instance != null)
         {
             ReplayManager.Instance.OnStatusChanged -= OnReplayStatusChanged;
@@ -197,7 +184,7 @@ public class UIPanelManager : MonoBehaviour
     }
 
     // ================================================================
-    //  DEFAULT MODE 事件绑定
+    //  DEFAULT MODE
     // ================================================================
     private void BindDefaultEvents()
     {
@@ -217,7 +204,7 @@ public class UIPanelManager : MonoBehaviour
     }
 
     // ================================================================
-    //  PLANNING MODE 事件绑定（保持不变）
+    //  PLANNING MODE
     // ================================================================
     private void BindPlanningEvents()
     {
@@ -235,7 +222,7 @@ public class UIPanelManager : MonoBehaviour
     }
 
     // ================================================================
-    //  REPLAY MODE 事件绑定（全新）
+    //  REPLAY MODE
     // ================================================================
     private void BindReplayEvents()
     {
@@ -263,12 +250,11 @@ public class UIPanelManager : MonoBehaviour
             speedDropdown.onValueChanged.AddListener(OnSpeedChanged);
         }
 
-        // 初始化速度下拉列表
         InitSpeedDropdown();
     }
 
     // ================================================================
-    //  Mission Mode 事件绑定（全新）
+    //  Mission Mode
     // ================================================================
 
     public void EnterMission()
@@ -284,7 +270,7 @@ public class UIPanelManager : MonoBehaviour
     }
 
     // ================================================================
-    //  面板切换
+    //  Panel Switching
     // ================================================================
 
     private void ShowOnlyPanel(GameObject panel)
@@ -297,7 +283,6 @@ public class UIPanelManager : MonoBehaviour
 
     public void ResetToDefaultMode()
     {
-        // If replaying, show replay panel instead of default
         if (ReplayManager.Instance != null && ReplayManager.Instance.IsReplaying)
         {
             ShowOnlyPanel(replayPanel);
@@ -318,14 +303,14 @@ public class UIPanelManager : MonoBehaviour
     {
         ShowOnlyPanel(planningPanel);
         if (planningController) planningController.EnterPlanningMode();
-        UpdateOutputText("规划模式：请选择起点 / 终点。");
+        UpdateOutputText("Planning Mode: Pick start/end points.");
     }
 
     public void ExitPlanning()
     {
         ShowOnlyPanel(defaultPanel);
         if (planningController) planningController.ExitPlanningMode();
-        UpdateOutputText("默认模式：输入 LLM 指令。");
+        UpdateOutputText("Default Mode: Enter LLM commands.");
     }
 
     public void EnterReplay()
@@ -338,7 +323,6 @@ public class UIPanelManager : MonoBehaviour
 
     public void ExitReplay()
     {
-        // Stop replay only when user explicitly clicks Exit Replay button
         if (ReplayManager.Instance != null && ReplayManager.Instance.IsReplaying)
             ReplayManager.Instance.StopReplay();
 
@@ -347,7 +331,7 @@ public class UIPanelManager : MonoBehaviour
     }
 
     // ================================================================
-    //  回放模式：日志文件下拉列表
+    //  Replay: Log File Dropdown
     // ================================================================
 
     private void RefreshLogFileDropdown()
@@ -360,15 +344,14 @@ public class UIPanelManager : MonoBehaviour
 
         if (_logFiles.Count == 0)
         {
-            logFileDropdown.AddOptions(new List<string> { "(无可用日志)" });
-            UpdateOutputText("回放模式：未找到任何日志文件。\\n请先飞行并保存日志。");
+            logFileDropdown.AddOptions(new List<string> { "(no log files)" });
+            UpdateOutputText("Replay Mode: No log files found.\\nFly and save a log first.");
             return;
         }
 
         var options = new List<string>();
         foreach (var (fileName, _) in _logFiles)
         {
-            // 显示更友好的名称：FlightLog_20260225_134500.json → 2026-02-25 13:45:00
             string display = FormatLogFileName(fileName);
             options.Add(display);
         }
@@ -376,13 +359,11 @@ public class UIPanelManager : MonoBehaviour
         logFileDropdown.AddOptions(options);
         logFileDropdown.SetValueWithoutNotify(0);
 
-        // 自动加载第一个文件
         OnLogFileSelected(0);
     }
 
     private string FormatLogFileName(string fileName)
     {
-        // FlightLog_20260225_134500.json → 2026-02-25 13:45:00
         string name = fileName.Replace("FlightLog_", "").Replace(".json", "");
         if (name.Length >= 15)
         {
@@ -397,7 +378,7 @@ public class UIPanelManager : MonoBehaviour
         return fileName;
     }
 
-    private void OnLogFileSelected(int index)
+    public void OnLogFileSelected(int index)
     {
         if (index < 0 || index >= _logFiles.Count) return;
 
@@ -406,22 +387,19 @@ public class UIPanelManager : MonoBehaviour
 
         if (ReplayManager.Instance == null)
         {
-            UpdateOutputText(" ReplayManager 未找到！");
+            UpdateOutputText("ReplayManager not found!");
             return;
         }
 
-        UpdateOutputText($"正在加载: {FormatLogFileName(fileName)}...");
+        UpdateOutputText($"Loading: {FormatLogFileName(fileName)}...");
 
-        // 加载完成后会通过 OnStatusChanged 回调更新 UI
         ReplayManager.Instance.LoadReplayFile(fullPath);
 
-        // 延迟刷新无人机下拉列表（等加载完成）
         StartCoroutine(RefreshReplayDroneDropdownDelayed());
     }
 
     private System.Collections.IEnumerator RefreshReplayDroneDropdownDelayed()
     {
-        // 等待加载完成（最多等3秒）
         float timeout = 3f;
         while (!ReplayManager.Instance.IsLoaded && timeout > 0)
         {
@@ -434,7 +412,7 @@ public class UIPanelManager : MonoBehaviour
     }
 
     // ================================================================
-    //  回放模式：无人机选择下拉列表
+    //  Replay: Drone Selection
     // ================================================================
 
     private void RefreshReplayDroneDropdown()
@@ -446,31 +424,28 @@ public class UIPanelManager : MonoBehaviour
         var replay = ReplayManager.Instance;
         if (replay == null || !replay.IsLoaded || replay.DroneNamesInLog.Count == 0)
         {
-            replayDroneDropdown.AddOptions(new List<string> { "(无数据)" });
+            replayDroneDropdown.AddOptions(new List<string> { "(no data)" });
             return;
         }
 
         var options = new List<string>();
-        options.Add("ALL (全部无人机)");
+        options.Add("ALL (all drones)");
         foreach (var name in replay.DroneNamesInLog)
-        {
             options.Add(name);
-        }
 
         replayDroneDropdown.AddOptions(options);
-        replayDroneDropdown.SetValueWithoutNotify(0); // 默认选 ALL
+        replayDroneDropdown.SetValueWithoutNotify(0);
     }
 
-    private void OnReplayDroneSelected(int index)
+    public void OnReplayDroneSelected(int index)
     {
         var replay = ReplayManager.Instance;
         if (replay == null || !replay.IsLoaded) return;
 
         if (index == 0)
         {
-            // ALL
             replay.SelectAllDrones();
-            UpdateOutputText($"已选择: 全部无人机 ({replay.DroneNamesInLog.Count} 架)");
+            UpdateOutputText($"Selected: All drones ({replay.DroneNamesInLog.Count})");
         }
         else
         {
@@ -479,13 +454,13 @@ public class UIPanelManager : MonoBehaviour
             {
                 string droneName = replay.DroneNamesInLog[droneIndex];
                 replay.SelectSingleDrone(droneName);
-                UpdateOutputText($"已选择: {droneName}");
+                UpdateOutputText($"Selected: {droneName}");
             }
         }
     }
 
     // ================================================================
-    //  回放模式：速度控制
+    //  Replay: Speed Control
     // ================================================================
 
     private void InitSpeedDropdown()
@@ -495,12 +470,9 @@ public class UIPanelManager : MonoBehaviour
         speedDropdown.ClearOptions();
         var options = new List<string>();
         for (int i = 0; i < _speedOptions.Length; i++)
-        {
             options.Add($"{_speedOptions[i]}x");
-        }
         speedDropdown.AddOptions(options);
 
-        // 默认选 1x（索引 2）
         _selectedSpeedIndex = 2;
         speedDropdown.SetValueWithoutNotify(_selectedSpeedIndex);
     }
@@ -512,47 +484,38 @@ public class UIPanelManager : MonoBehaviour
         _selectedSpeedIndex = index;
         float speed = _speedOptions[index];
 
-        var replay = ReplayManager.Instance;
-        if (replay != null)
-        {
-            replay.SetReplaySpeed(speed);
-        }
+        if (ReplayManager.Instance != null)
+            ReplayManager.Instance.SetReplaySpeed(speed);
     }
 
     // ================================================================
-    //  回放模式：控制按钮
+    //  Replay: Control Buttons
     // ================================================================
 
-    private void OnStartReplay()
+    public void OnStartReplay()
     {
         var replay = ReplayManager.Instance;
         if (replay == null)
         {
-            UpdateOutputText(" ReplayManager 未找到！");
+            UpdateOutputText("ReplayManager not found!");
             return;
         }
 
         if (!replay.IsLoaded)
         {
-            UpdateOutputText(" 请先选择一个日志文件");
+            UpdateOutputText("Please select a log file first.");
             return;
         }
 
         if (replay.IsReplaying)
-        {
-            // 如果已经在回放，先停止再重新开始
             replay.StopReplay();
-        }
 
-        // 应用当前选择的速度
         float speed = _speedOptions[_selectedSpeedIndex];
         replay.SetReplaySpeed(speed);
 
-        // 应用当前选择的无人机
         if (replayDroneDropdown)
             OnReplayDroneSelected(replayDroneDropdown.value);
 
-        // 开始回放
         replay.StartReplay();
         UpdateReplayButtonStates();
     }
@@ -566,7 +529,7 @@ public class UIPanelManager : MonoBehaviour
         UpdateReplayButtonStates();
     }
 
-    private void OnStopReplay()
+    public void OnStopReplay()
     {
         var replay = ReplayManager.Instance;
         if (replay == null) return;
@@ -576,7 +539,7 @@ public class UIPanelManager : MonoBehaviour
     }
 
     // ================================================================
-    //  回放模式：UI 状态更新
+    //  Replay: UI State
     // ================================================================
 
     private void UpdateReplayButtonStates()
@@ -609,25 +572,20 @@ public class UIPanelManager : MonoBehaviour
             exitReplayButton.interactable = !isReplaying;
     }
 
-    /// <summary>
-    /// ReplayManager 的状态变化回调
-    /// </summary>
     private void OnReplayStatusChanged(string msg)
     {
         UpdateOutputText(msg);
         UpdateReplayButtonStates();
     }
 
-    /// <summary>
-    /// 回放结束回调
-    /// </summary>
     private void OnReplayFinished()
     {
         UpdateReplayButtonStates();
         UpdateOutputText("Replay complete! Drone states restored.\\nSelect another file or exit replay mode.");
     }
+
     // ================================================================
-    //  DEFAULT MODE 处理函数
+    //  DEFAULT MODE handlers
     // ================================================================
 
     private void OnSend()
@@ -650,22 +608,25 @@ public class UIPanelManager : MonoBehaviour
             return;
         }
 
-        string path = Logger.Instance.SaveLog();
+        string path = Logger.Instance.SaveLogAndContinue();
+
         if (!string.IsNullOrEmpty(path))
         {
-            UpdateOutputText("Log saved: " + System.IO.Path.GetFileName(path));
+            UpdateOutputText("Log saved: " + System.IO.Path.GetFileName(path) +
+    System.Environment.NewLine + "New recording started.");
 
+            // Refresh log file list if replay panel is open
             if (replayPanel && replayPanel.activeSelf)
                 RefreshLogFileDropdown();
         }
         else
         {
-            UpdateOutputText("No data to save (may already be saved)");
+            UpdateOutputText("No data to save (may already be saved).");
         }
     }
 
     // ================================================================
-    //  PLANNING MODE 处理函数（保持不变）
+    //  PLANNING MODE handlers
     // ================================================================
 
     private void OnPlanningDroneChanged(int index)
@@ -719,16 +680,16 @@ public class UIPanelManager : MonoBehaviour
         }
 
         string pickMode = picker ? picker.mode.ToString() : "(picker missing)";
-        string se = picker ? $"Start={(picker.HasStart ? "✔" : "—")}  End={(picker.HasEnd ? "✔" : "—")}" : "";
+        string se = picker ? $"Start={(picker.HasStart ? "\\u2714" : "\\u2014")}  End={(picker.HasEnd ? "\\u2714" : "\\u2014")}" : "";
 
         string hint = "";
-        if (picker && !picker.HasEnd) hint = "\\nHint: 需要先选 End";
+        if (picker && !picker.HasEnd) hint = "\\nHint: Pick End point first";
 
         statusText.text = $"Current: {curName}\\nPickMode: {pickMode}\\n{se}{hint}";
     }
 
     // ================================================================
-    //  状态更新（同时给 Planning 的 UpdateStatus 用）
+    //  Status Update
     // ================================================================
 
     public void UpdateStatus()
@@ -737,8 +698,8 @@ public class UIPanelManager : MonoBehaviour
 
         Transform currentTarget = switchView.CurrentDroneTarget;
         string droneName = currentTarget
-            ? currentTarget.GetComponentInParent<DroneInfo>()?.GetName() ?? "未知"
-            : "无";
+            ? currentTarget.GetComponentInParent<DroneInfo>()?.GetName() ?? "Unknown"
+            : "None";
 
         string modeStr = picker.mode.ToString();
         Unity.Mathematics.double3 llh =
@@ -746,13 +707,11 @@ public class UIPanelManager : MonoBehaviour
             (picker.mode == MapPickController.PickMode.PickEnd && picker.HasEnd) ? picker.EndLLH :
             new Unity.Mathematics.double3(0, 0, 0);
 
-        UpdateOutputText($"当前无人机：{droneName}\\n拾取模式: {modeStr}\\n位置: {llh.x:F4}, {llh.y:F4}, {llh.z:F1}m");
+        UpdateOutputText($"Drone: {droneName}\\nPick mode: {modeStr}\\nPos: {llh.x:F4}, {llh.y:F4}, {llh.z:F1}m");
     }
 
     public void ClosePanel()
     {
-        // DO NOT stop replay when closing UI panel
-        // User can close UI with Tab/X and replay continues in background
         gameObject.SetActive(false);
     }
 
@@ -762,7 +721,7 @@ public class UIPanelManager : MonoBehaviour
     }
 
     // ================================================================
-    //  工具方法
+    //  Utilities
     // ================================================================
 
     private void BindButton(Button btn, UnityEngine.Events.UnityAction action)

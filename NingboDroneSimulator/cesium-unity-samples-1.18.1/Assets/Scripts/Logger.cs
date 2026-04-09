@@ -31,10 +31,6 @@ public class Logger : MonoBehaviour
     public int FrameCount => _currentLog?.frames?.Count ?? 0;
 
     // ====== Path Helper ======
-    /// <summary>
-    /// Returns a folder inside the project directory (Editor) or next to the .exe (Build).
-    /// Keeps C: drive clean.
-    /// </summary>
     private static string GetLogDirectory()
     {
         #if UNITY_EDITOR
@@ -59,13 +55,15 @@ public class Logger : MonoBehaviour
     }
 
     /// <summary>
-    /// Start a new recording session
+    /// Start a new recording session.
+    /// ★ FIX: Only blocks if actively recording AND not yet saved.
+    /// After SaveLog() or StopRecording(), a new session CAN be started.
     /// </summary>
     public void StartNewSession()
     {
-        if (_sessionInitialized && _isRecording)
+        if (_sessionInitialized && _isRecording && !_saved)
         {
-            Debug.LogWarning("[Logger] Session already active, ignoring StartNewSession call");
+            Debug.LogWarning("[Logger] Session already recording, ignoring StartNewSession");
             return;
         }
 
@@ -91,6 +89,34 @@ public class Logger : MonoBehaviour
     {
         _isRecording = false;
         Debug.Log($"[Logger] Recording stopped, {FrameCount} frames recorded");
+    }
+
+    /// <summary>
+    /// ★ NEW: Called at the start of each new mission dispatch.
+    /// Auto-saves the current session (if any recorded data exists) and starts fresh.
+    /// This ensures each mission dispatch gets its own log file.
+    /// Returns the path of the saved file, or null if nothing was saved.
+    /// </summary>
+    public string PrepareForNewMission()
+    {
+        string savedPath = null;
+
+        // Save current session if it has unsaved data
+        if (_currentLog != null && _currentLog.frames.Count > 0 && !_saved)
+        {
+            savedPath = SaveLog();
+            Debug.Log($"[Logger] Auto-saved previous session before new mission: {savedPath}");
+        }
+
+        // Reset state flags to allow a fresh session
+        _sessionInitialized = false;
+        _saved = false;
+        _isRecording = false;
+
+        // Start the new session immediately
+        StartNewSession();
+
+        return savedPath;
     }
 
     /// <summary>
@@ -128,6 +154,8 @@ public class Logger : MonoBehaviour
 
     /// <summary>
     /// Save log to file. Returns file path on success, null on failure.
+    /// ★ FIX: After saving, does NOT auto-start a new session.
+    /// Call StartNewSession() or PrepareForNewMission() explicitly.
     /// </summary>
     public string SaveLog()
     {
@@ -148,7 +176,6 @@ public class Logger : MonoBehaviour
         string json = JsonUtility.ToJson(_currentLog, true);
         string fileName = $"FlightLog_{_currentLog.sessionId}.json";
 
-        // ★ Changed: save to project directory instead of C: drive
         string dir = GetLogDirectory();
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, fileName);
@@ -175,13 +202,30 @@ public class Logger : MonoBehaviour
     }
 
     /// <summary>
+    /// ★ NEW: Save current log AND immediately start a new recording session.
+    /// Convenient for UI "Save Log" button — keeps recording alive.
+    /// Returns saved file path, or null if nothing to save.
+    /// </summary>
+    public string SaveLogAndContinue()
+    {
+        string path = SaveLog();
+
+        // Immediately start a new session so recording continues
+        _sessionInitialized = false;
+        _saved = false;
+        _isRecording = false;
+        StartNewSession();
+
+        return path;
+    }
+
+    /// <summary>
     /// Get list of all saved log files (fileName, fullPath)
     /// </summary>
     public static List<(string fileName, string fullPath)> GetSavedLogFiles()
     {
         var result = new List<(string, string)>();
 
-        // ★ Changed: look in project directory instead of C: drive
         string dir = GetLogDirectory();
 
         if (!Directory.Exists(dir)) return result;
