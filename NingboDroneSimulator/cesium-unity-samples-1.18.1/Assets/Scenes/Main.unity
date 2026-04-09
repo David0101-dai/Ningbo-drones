@@ -677,8 +677,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 14
-  m_fontSizeBase: 14
+  m_fontSize: 10
+  m_fontSizeBase: 10
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -1731,7 +1731,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &107392777
 RectTransform:
   m_ObjectHideFlags: 0
@@ -5305,7 +5305,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &337375771
 RectTransform:
   m_ObjectHideFlags: 0
@@ -28512,8 +28512,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 14
-  m_fontSizeBase: 14
+  m_fontSize: 10
+  m_fontSizeBase: 10
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -29785,7 +29785,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1926790146}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.16177273, y: -0.6675318, z: 0.1519355, w: 0.71073663}
+  m_LocalRotation: {x: 0.16177274, y: -0.6675317, z: 0.15193549, w: 0.71073663}
   m_LocalPosition: {x: -22.599625, y: -79.43978, z: -6.900478}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -30481,11 +30481,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a02b3d47f43279b47a599fb101e131dc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  simSpeedMultiplier: 1
   _simTime: 0
   _isPaused: 0
   _isRunning: 0
   _displayTime: 00:00:00
+  _displaySpeedMultiplier: 1
 --- !u!1 &1972699833
 GameObject:
   m_ObjectHideFlags: 0
@@ -32714,7 +32714,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2123498507}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.16177273, y: -0.6675318, z: 0.15193552, w: 0.7107366}
+  m_LocalRotation: {x: 0.16177273, y: -0.66753167, z: 0.15193547, w: 0.7107367}
   m_LocalPosition: {x: -22.599625, y: -79.43978, z: -6.900478}
   m_LocalScale: {x: 1.0000255, y: 1.0000006, z: 1.0000248}
   m_ConstrainProportionsScale: 0
@@ -32887,19 +32887,19 @@ MonoBehaviour:
   _detectTransformChanges: 0
   _localToGlobeFixedMatrix:
     c0:
-      x: 0.2067026143811289
-      y: -0.4563812593862962
-      z: 0.8654716416998688
+      x: 0.20670230840543855
+      y: -0.45638142132415344
+      z: 0.8654716258273258
       w: 0
     c1:
-      x: -0.03384492774923348
-      y: 0.8806875805413238
-      z: 0.47248819537485887
+      x: -0.033844961185119427
+      y: 0.880687509067908
+      z: 0.47248832551709913
       w: 0
     c2:
-      x: 0.9778436038912031
-      y: 0.12695619668070968
-      z: -0.16659401842119145
+      x: 0.977843664370638
+      y: 0.12695610613033073
+      z: -0.1665937138390779
       w: 0
     c3:
       x: -2896234.556993627

@@ -1,0 +1,29 @@
+﻿=== Mission Summary ===
+Dataset: C1_2_1
+Strategy: Greedy Insertion (100% Coverage) / Balanced
+
+Deliveries: 200
+On time: 90 (45.0%)
+Late: 110
+Avg lateness: 995.9 sim_time_units
+Max lateness: 3099.2 sim_time_units
+
+=== Leg Statistics ===
+Total legs: 210
+Total straight-line distance: 137731m (137.7km)
+Total actual flown distance: 105369m (105.4km)
+Detour ratio: 0.77x (1.0 = no detour)
+Avg speed: 9.5 m/s
+
+=== Route Statistics ===
+Routes completed: 10/10
+Total distance (actual): 105369m (105.4km)
+Makespan: 3576 sim_time_units
+Avg battery used per route: 16.4%
+
+=== Units Reference ===
+Distance: meters (m)
+Time: sim_time_units (Solomon abstract units)
+Speed: meters/second (m/s)
+Coordinates: WGS84 degrees (longitude, latitude)
+Altitude: meters above WGS84 ellipsoid

@@ -1,0 +1,11 @@
+﻿Drone,RouteIndex,CustomerCount,TotalDemand,VehicleCapacity,StartTime,EndTime,TotalTime,DistanceMeters,OnTimeCount,LateCount,TotalLateness,BatteryStartPct,BatteryEndPct,BatteryUsedPct,Strategy,Completed
+V10,1,9,180,200,0.0,810.1,810.1,8687,3,6,683.2,100.0,85.5,14.5,Greedy Insertion (100% Coverage) / Balanced,True
+V09,2,12,190,200,0.0,858.7,858.7,9019,8,4,493.4,100.0,85.4,14.6,Greedy Insertion (100% Coverage) / Balanced,True
+V08,3,12,200,200,0.0,727.4,727.4,7426,9,3,332.8,100.0,89.3,10.7,Greedy Insertion (100% Coverage) / Balanced,True
+V07,4,13,190,200,0.0,559.7,559.7,5471,12,1,167.8,100.0,91.8,8.2,Greedy Insertion (100% Coverage) / Balanced,True
+V06,5,9,200,200,0.0,562.5,562.5,5750,4,5,425.9,100.0,90.2,9.8,Greedy Insertion (100% Coverage) / Balanced,True
+V05,6,11,200,200,0.0,980.5,980.5,10510,6,5,1062.5,100.0,84.0,16.0,Greedy Insertion (100% Coverage) / Balanced,True
+V04,7,9,200,200,0.0,902.1,902.1,9816,5,4,442.8,100.0,83.5,16.5,Greedy Insertion (100% Coverage) / Balanced,True
+V03,8,11,200,200,0.0,488.5,488.5,4739,9,2,127.8,100.0,92.4,7.6,Greedy Insertion (100% Coverage) / Balanced,True
+V02,9,15,250,200,0.0,814.1,814.1,8394,13,2,79.1,100.0,87.6,12.4,Greedy Insertion (100% Coverage) / Balanced,True
+V01,10,99,1720,200,0.0,3576.3,3576.3,35558,21,78,105739.0,100.0,45.9,54.1,Greedy Insertion (100% Coverage) / Balanced,True

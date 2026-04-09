@@ -448,7 +448,7 @@ namespace BeanStudio
                 switch (c)
                 {
                     case '\\':
-                        sb.Append("\\\\");
+                        sb.Append("\\");
                         break;
                     case '\"':
                         sb.Append("\\\"");

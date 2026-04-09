@@ -4,75 +4,47 @@ using System.Linq;
 using UnityEngine;
 
 /// <summary>
-/// ★★★ EXAMPLE SOLVER — Template for future students ★★★
+/// Nearest-Neighbor heuristic for VRPTW.
 ///
-/// This is the simplest possible routing algorithm:
-/// Nearest-Neighbor heuristic. Always go to the closest unvisited customer.
+/// Phase 1 (Strict): Always visit the nearest unserved customer that
+///   satisfies both capacity and time window constraints.
+/// Phase 2 (Relaxed): For any remaining unrouted customers, relax
+///   time window constraints and insert using cheapest insertion.
+/// Phase 3 (Emergency): Create solo routes for any still-unrouted customers.
 ///
-/// HOW TO CREATE YOUR OWN SOLVER:
-/// ================================================
-/// 1. Copy this file and rename it (e.g., GeneticAlgorithmSolver.cs)
-/// 2. Rename the class
-/// 3. Change Name and Description
-/// 4. Implement your algorithm in Solve()
-/// 5. Register it in SolverRegistry.InitBuiltInSolvers():
-///        Register(new GeneticAlgorithmSolver());
-/// 6. Done! It will appear in the Strategy dropdown.
-/// ================================================
-///
-/// RULES YOUR SOLVER MUST FOLLOW:
-/// - Each route starts and ends with a Depot stop (use ctx.MakeDepotStop())
-/// - Each delivery stop references a DeliveryOrder (use ctx.MakeDeliveryStop())
-/// - Do NOT exceed ctx.vehicleCapacity per route
-/// - Do NOT create more routes than ctx.maxVehicles
-/// - Set timing fields: plannedArrival, serviceStart, serviceEnd, plannedDeparture
-/// - Respect time windows: arrival should be <= order.dueTime
-///
-/// AVAILABLE DATA (from RoutingContext ctx):
-/// - ctx.depotLLH              → Depot GPS coordinates
-/// - ctx.orders                → List of all orders to deliver
-/// - ctx.vehicleCapacity       → Max cargo per drone
-/// - ctx.maxVehicles           → Max number of drones
-/// - ctx.speedMps              → Drone speed in m/s
-/// - ctx.distanceMatrix[i][j]  → Distance in meters (0=depot, i+1=orders[i])
-/// - ctx.timeMatrix[i][j]      → Travel time in seconds
-/// - ctx.MakeDepotStop()       → Helper to create depot RouteStop
-/// - ctx.MakeDeliveryStop(order) → Helper to create delivery RouteStop
-/// - RoutingContext.GeoDistance(a, b) → Calculate distance between two points
+/// 100% customer coverage guaranteed.
 /// </summary>
 public class NearestFirstSolver : IRoutingSolver
 {
-    // ================================================================
-    //  Step 1: Set your solver's name and description
-    // ================================================================
-
     public string Name => "Nearest Neighbor";
 
     public string Description =>
-        "Simple greedy heuristic: always visit the nearest unserved customer next. " +
-        "Fast but produces suboptimal routes. Good baseline for comparison.";
-
-    // ================================================================
-    //  Step 2: Implement the Solve method
-    // ================================================================
+        "Greedy nearest-neighbor heuristic with guaranteed 100% coverage. " +
+        "Phase 1: strict TW. Phase 2: relaxed insertion. Phase 3: emergency solo routes.";
 
     public List<PlannedRoute> Solve(RoutingContext ctx)
     {
         var routes = new List<PlannedRoute>();
         var unrouted = new HashSet<int>();
 
-        // Initialize: all orders need routing
         for (int i = 0; i < ctx.orders.Count; i++)
             unrouted.Add(i);
 
+        int n = ctx.orders.Count;
+
+        Debug.Log($"[NearestFirst] Starting: {n} customers, " +
+                  $"{ctx.maxVehicles} vehicles, cap={ctx.vehicleCapacity}, " +
+                  $"speed={ctx.speedMps:F1} m/s");
+
+        // ══════════════════════════════════════════
+        //  Phase 1: Strict TW — original NN logic
+        // ══════════════════════════════════════════
         int vehicleNum = 0;
 
-        // Keep creating routes until all orders are routed or we run out of vehicles
         while (unrouted.Count > 0 && vehicleNum < ctx.maxVehicles)
         {
             vehicleNum++;
 
-            // Create a new route starting at depot
             var route = new PlannedRoute
             {
                 vehicleCapacity = ctx.vehicleCapacity,
@@ -80,10 +52,9 @@ public class NearestFirstSolver : IRoutingSolver
             };
             route.stops.Add(ctx.MakeDepotStop(0));
 
-            int currentMatrixIdx = 0; // Start at depot
+            int currentMI = 0;
             float currentTime = 0f;
 
-            // Greedily add nearest feasible customer
             bool found = true;
             while (found && unrouted.Count > 0)
             {
@@ -94,20 +65,20 @@ public class NearestFirstSolver : IRoutingSolver
                 foreach (int idx in unrouted)
                 {
                     var order = ctx.orders[idx];
-                    int mIdx = ctx.OrderToMatrixIndex(idx);
+                    int mIdx = idx + 1;
 
-                    // Check capacity
+                    // Capacity check
                     if (route.totalDemand + order.demand > ctx.vehicleCapacity)
                         continue;
 
-                    // Check time window feasibility
-                    float travelTime = ctx.timeMatrix[currentMatrixIdx, mIdx];
-                    float arrival = currentTime + travelTime;
+                    // Strict TW check
+                    float travel = ctx.timeMatrix[currentMI, mIdx];
+                    float arrival = currentTime + travel;
                     if (arrival > order.dueTime)
                         continue;
 
                     // Pick nearest
-                    float dist = ctx.distanceMatrix[currentMatrixIdx, mIdx];
+                    float dist = ctx.distanceMatrix[currentMI, mIdx];
                     if (dist < bestDist)
                     {
                         bestDist = dist;
@@ -118,11 +89,10 @@ public class NearestFirstSolver : IRoutingSolver
                 if (bestIdx >= 0)
                 {
                     var order = ctx.orders[bestIdx];
-                    int mIdx = ctx.OrderToMatrixIndex(bestIdx);
+                    int mIdx = bestIdx + 1;
 
-                    // Create delivery stop with timing
                     var stop = ctx.MakeDeliveryStop(order);
-                    float travel = ctx.timeMatrix[currentMatrixIdx, mIdx];
+                    float travel = ctx.timeMatrix[currentMI, mIdx];
                     float arrival = currentTime + travel;
                     float svcStart = Mathf.Max(arrival, order.readyTime);
 
@@ -136,7 +106,7 @@ public class NearestFirstSolver : IRoutingSolver
                     route.stops.Add(stop);
                     route.totalDemand += order.demand;
 
-                    currentMatrixIdx = mIdx;
+                    currentMI = mIdx;
                     currentTime = stop.plannedDeparture;
 
                     unrouted.Remove(bestIdx);
@@ -144,11 +114,10 @@ public class NearestFirstSolver : IRoutingSolver
                 }
             }
 
-            // Close route: return to depot
-            float returnTravel = ctx.timeMatrix[currentMatrixIdx, ctx.DepotIndex];
+            // Close route
+            float returnTravel = ctx.timeMatrix[currentMI, 0];
             route.stops.Add(ctx.MakeDepotStop(currentTime + returnTravel));
 
-            // Set route totals
             route.customerCount = route.DeliveryStopCount;
             route.totalTime = currentTime + returnTravel;
             route.totalDistance = ComputeRouteDistance(route, ctx);
@@ -157,15 +126,327 @@ public class NearestFirstSolver : IRoutingSolver
                 routes.Add(route);
         }
 
+        int phase1Routed = n - unrouted.Count;
+        Debug.Log($"[NearestFirst] Phase 1 complete: {phase1Routed}/{n} routed, " +
+                  $"{unrouted.Count} remaining, {routes.Count} routes");
+
+        // ══════════════════════════════════════════
+        //  Phase 2: Relaxed — insert remaining into
+        //  existing routes (ignore TW, respect capacity)
+        // ══════════════════════════════════════════
         if (unrouted.Count > 0)
-            Debug.LogWarning($"[NearestFirst] {unrouted.Count} customers unrouted");
+        {
+            int inserted = InsertIntoExistingRoutes(routes, ctx, unrouted);
+            Debug.Log($"[NearestFirst] Phase 2: inserted {inserted} into existing routes, " +
+                      $"{unrouted.Count} remaining");
+        }
+
+        // ══════════════════════════════════════════
+        //  Phase 3: Create new routes for remaining
+        //  (no vehicle limit — guarantee coverage)
+        // ══════════════════════════════════════════
+        if (unrouted.Count > 0)
+        {
+            int newRoutes = CreateRoutesForRemaining(routes, ctx, unrouted);
+            Debug.Log($"[NearestFirst] Phase 3: created {newRoutes} new routes, " +
+                      $"{unrouted.Count} remaining");
+        }
+
+        // ══════════════════════════════════════════
+        //  Phase 4: Emergency solo routes
+        //  (absolute last resort — should never reach here)
+        // ══════════════════════════════════════════
+        if (unrouted.Count > 0)
+        {
+            Debug.LogWarning($"[NearestFirst] Phase 4 EMERGENCY: " +
+                             $"{unrouted.Count} still unrouted, creating solo routes");
+
+            var toRemove = new List<int>(unrouted);
+            foreach (int idx in toRemove)
+            {
+                var order = ctx.orders[idx];
+                var solo = new PlannedRoute
+                {
+                    vehicleCapacity = ctx.vehicleCapacity,
+                    totalDemand = order.demand
+                };
+
+                solo.stops.Add(ctx.MakeDepotStop(0));
+
+                int mIdx = idx + 1;
+                float travel = ctx.timeMatrix[0, mIdx];
+                var stop = ctx.MakeDeliveryStop(order);
+                stop.plannedArrival = travel;
+                stop.waitUntil = order.readyTime;
+                stop.serviceStart = Mathf.Max(travel, order.readyTime);
+                stop.serviceEnd = stop.serviceStart + order.serviceTime;
+                stop.plannedDeparture = stop.serviceEnd;
+                stop.wasLate = travel > order.dueTime;
+                solo.stops.Add(stop);
+
+                float returnT = ctx.timeMatrix[mIdx, 0];
+                solo.stops.Add(ctx.MakeDepotStop(stop.plannedDeparture + returnT));
+
+                solo.customerCount = 1;
+                solo.totalDemand = order.demand;
+                solo.totalDistance = ctx.distanceMatrix[0, mIdx] +
+                                    ctx.distanceMatrix[mIdx, 0];
+                solo.totalTime = stop.plannedDeparture + returnT;
+
+                routes.Add(solo);
+                unrouted.Remove(idx);
+            }
+        }
+
+        // ══════════════════════════════════════════
+        //  Final verification + statistics
+        // ══════════════════════════════════════════
+        int totalRouted = routes.Sum(r => r.DeliveryStopCount);
+        int onTime = CountOnTime(routes);
+        float totalDist = routes.Sum(r => r.totalDistance);
+        float makespan = routes.Count > 0 ? routes.Max(r => r.totalTime) : 0;
+
+        Debug.Log($"[NearestFirst] COMPLETE:" +
+                  $"\\n  Customers: {totalRouted}/{n} " +
+                  $"({(totalRouted >= n ? "100%" : "MISSING!")})" +
+                  $"\\n  Routes: {routes.Count}" +
+                  $"\\n  On-time: {onTime}/{totalRouted} " +
+                  $"({(totalRouted > 0 ? (float)onTime / totalRouted * 100f : 0):F1}%)" +
+                  $"\\n  Distance: {totalDist:F0}m ({totalDist / 1000f:F1}km)" +
+                  $"\\n  Makespan: {makespan:F1}");
+
+        if (totalRouted < n)
+            Debug.LogError($"[NearestFirst] FATAL: {n - totalRouted} customers lost!");
 
         return routes;
     }
 
-    // ================================================================
-    //  Helper (students can add their own helper methods)
-    // ================================================================
+    // ══════════════════════════════════════════════
+    //  Phase 2: Insert into existing routes
+    //  Cheapest insertion, capacity only (TW relaxed)
+    // ══════════════════════════════════════════════
+
+    private int InsertIntoExistingRoutes(List<PlannedRoute> routes,
+                                         RoutingContext ctx,
+                                         HashSet<int> unrouted)
+    {
+        int inserted = 0;
+        var toRemove = new List<int>();
+
+        foreach (int idx in unrouted)
+        {
+            var order = ctx.orders[idx];
+            int newMI = idx + 1;
+
+            float bestCost = float.MaxValue;
+            PlannedRoute bestRoute = null;
+            int bestPos = -1;
+
+            foreach (var route in routes)
+            {
+                // Capacity check (always hard)
+                if (route.totalDemand + order.demand > route.vehicleCapacity)
+                    continue;
+
+                // Try every insertion position (between existing stops)
+                for (int pos = 1; pos < route.stops.Count; pos++)
+                {
+                    int prevMI = GetMatrixIndex(route.stops[pos - 1], ctx);
+                    int nextMI = GetMatrixIndex(route.stops[pos], ctx);
+
+                    float cost = ctx.distanceMatrix[prevMI, newMI] +
+                                 ctx.distanceMatrix[newMI, nextMI] -
+                                 ctx.distanceMatrix[prevMI, nextMI];
+
+                    if (cost < bestCost)
+                    {
+                        bestCost = cost;
+                        bestRoute = route;
+                        bestPos = pos;
+                    }
+                }
+            }
+
+            if (bestRoute != null)
+            {
+                // Insert the stop
+                var stop = ctx.MakeDeliveryStop(order);
+                bestRoute.stops.Insert(bestPos, stop);
+                bestRoute.totalDemand += order.demand;
+                bestRoute.customerCount++;
+
+                // Recalculate timing for entire route
+                RecalcTiming(bestRoute, ctx);
+                bestRoute.totalDistance = ComputeRouteDistance(bestRoute, ctx);
+                bestRoute.totalTime =
+                    bestRoute.stops[bestRoute.stops.Count - 1].plannedArrival;
+
+                toRemove.Add(idx);
+                inserted++;
+            }
+        }
+
+        foreach (int idx in toRemove)
+            unrouted.Remove(idx);
+
+        return inserted;
+    }
+
+    // ══════════════════════════════════════════════
+    //  Phase 3: Create new NN routes for remaining
+    //  (relaxed TW — accept late deliveries)
+    // ══════════════════════════════════════════════
+
+    private int CreateRoutesForRemaining(List<PlannedRoute> routes,
+                                          RoutingContext ctx,
+                                          HashSet<int> unrouted)
+    {
+        int newRouteCount = 0;
+
+        while (unrouted.Count > 0)
+        {
+            var route = new PlannedRoute
+            {
+                vehicleCapacity = ctx.vehicleCapacity,
+                totalDemand = 0
+            };
+            route.stops.Add(ctx.MakeDepotStop(0));
+
+            int currentMI = 0;
+            float currentTime = 0f;
+
+            // NN greedy — capacity only, NO TW check
+            bool found = true;
+            while (found && unrouted.Count > 0)
+            {
+                found = false;
+                int bestIdx = -1;
+                float bestDist = float.MaxValue;
+
+                foreach (int idx in unrouted)
+                {
+                    var order = ctx.orders[idx];
+
+                    // Only check capacity
+                    if (route.totalDemand + order.demand > ctx.vehicleCapacity)
+                        continue;
+
+                    float dist = ctx.distanceMatrix[currentMI, idx + 1];
+                    if (dist < bestDist)
+                    {
+                        bestDist = dist;
+                        bestIdx = idx;
+                    }
+                }
+
+                if (bestIdx >= 0)
+                {
+                    var order = ctx.orders[bestIdx];
+                    int mIdx = bestIdx + 1;
+
+                    var stop = ctx.MakeDeliveryStop(order);
+                    float travel = ctx.timeMatrix[currentMI, mIdx];
+                    float arrival = currentTime + travel;
+                    float svcStart = Mathf.Max(arrival, order.readyTime);
+
+                    stop.plannedArrival = arrival;
+                    stop.waitUntil = order.readyTime;
+                    stop.serviceStart = svcStart;
+                    stop.serviceEnd = svcStart + order.serviceTime;
+                    stop.plannedDeparture = stop.serviceEnd;
+                    stop.wasLate = arrival > order.dueTime;
+
+                    route.stops.Add(stop);
+                    route.totalDemand += order.demand;
+
+                    currentMI = mIdx;
+                    currentTime = stop.plannedDeparture;
+
+                    unrouted.Remove(bestIdx);
+                    found = true;
+                }
+            }
+
+            // Close route
+            float returnTravel = ctx.timeMatrix[currentMI, 0];
+            route.stops.Add(ctx.MakeDepotStop(currentTime + returnTravel));
+
+            route.customerCount = route.DeliveryStopCount;
+            route.totalTime = currentTime + returnTravel;
+            route.totalDistance = ComputeRouteDistance(route, ctx);
+
+            if (route.customerCount > 0)
+            {
+                routes.Add(route);
+                newRouteCount++;
+            }
+            else
+            {
+                // Safety: if no customer could be added (all exceed capacity),
+                // break to avoid infinite loop
+                break;
+            }
+        }
+
+        return newRouteCount;
+    }
+
+    // ══════════════════════════════════════════════
+    //  Timing Recalculation
+    // ══════════════════════════════════════════════
+
+    private void RecalcTiming(PlannedRoute route, RoutingContext ctx)
+    {
+        if (route.stops.Count < 2) return;
+
+        route.stops[0].plannedArrival = 0;
+        route.stops[0].plannedDeparture = 0;
+
+        for (int i = 1; i < route.stops.Count; i++)
+        {
+            int prevMI = GetMatrixIndex(route.stops[i - 1], ctx);
+            int currMI = GetMatrixIndex(route.stops[i], ctx);
+            float travel = ctx.timeMatrix[prevMI, currMI];
+            float arrival = route.stops[i - 1].plannedDeparture + travel;
+
+            route.stops[i].plannedArrival = arrival;
+
+            if (route.stops[i].type == RouteStop.StopType.Delivery &&
+                route.stops[i].order != null)
+            {
+                var order = route.stops[i].order;
+                route.stops[i].waitUntil = order.readyTime;
+                route.stops[i].serviceStart = Mathf.Max(arrival, order.readyTime);
+                route.stops[i].serviceEnd =
+                    route.stops[i].serviceStart + order.serviceTime;
+                route.stops[i].plannedDeparture = route.stops[i].serviceEnd;
+                route.stops[i].wasLate = arrival > order.dueTime;
+            }
+            else
+            {
+                route.stops[i].plannedDeparture = arrival;
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════
+    //  Statistics
+    // ══════════════════════════════════════════════
+
+    private int CountOnTime(List<PlannedRoute> routes)
+    {
+        int count = 0;
+        foreach (var r in routes)
+            foreach (var s in r.stops)
+                if (s.type == RouteStop.StopType.Delivery &&
+                    s.order != null && !s.wasLate)
+                    count++;
+        return count;
+    }
+
+    // ══════════════════════════════════════════════
+    //  Helpers
+    // ══════════════════════════════════════════════
 
     private float ComputeRouteDistance(PlannedRoute route, RoutingContext ctx)
     {

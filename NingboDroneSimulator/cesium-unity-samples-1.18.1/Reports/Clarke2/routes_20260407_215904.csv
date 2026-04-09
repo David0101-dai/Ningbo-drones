@@ -1,0 +1,11 @@
+﻿Drone,RouteIndex,CustomerCount,TotalDemand,VehicleCapacity,StartTime,EndTime,TotalTime,DistanceMeters,OnTimeCount,LateCount,TotalLateness,BatteryStartPct,BatteryEndPct,BatteryUsedPct,Strategy,Completed
+V10_10,1,5,100,200,0.0,365.7,365.7,4234,0,5,227.0,100.0,94.5,5.5,Clarke-Wright Savings / Balanced,True
+V09_9,2,7,130,200,0.0,436.6,436.6,5021,0,7,474.8,100.0,93.1,6.9,Clarke-Wright Savings / Balanced,True
+V08_8,3,7,130,200,0.0,389.1,389.1,4443,1,6,646.0,100.0,94.2,5.8,Clarke-Wright Savings / Balanced,True
+V07_7,4,8,100,200,0.0,734.7,734.7,8484,0,8,1893.3,100.0,88.3,11.7,Clarke-Wright Savings / Balanced,True
+V06_6,5,1,40,200,0.0,281.8,281.8,3394,0,1,48.7,100.0,95.5,4.5,Clarke-Wright Savings / Balanced,True
+V05_5,6,8,200,200,0.0,728.0,728.0,8406,0,8,1787.4,100.0,87.7,12.3,Clarke-Wright Savings / Balanced,True
+V04_4,7,7,150,200,0.0,413.0,413.0,4819,0,7,822.0,100.0,92.8,7.2,Clarke-Wright Savings / Balanced,True
+V03_3,8,1,30,200,0.0,257.9,257.9,3131,0,1,48.4,100.0,95.9,4.1,Clarke-Wright Savings / Balanced,True
+V02_2,9,4,60,200,0.0,364.4,364.4,4286,0,4,265.3,100.0,94.0,6.0,Clarke-Wright Savings / Balanced,True
+V01_1,10,2,30,200,0.0,324.7,324.7,3871,1,1,18.1,100.0,95.3,4.7,Clarke-Wright Savings / Balanced,True

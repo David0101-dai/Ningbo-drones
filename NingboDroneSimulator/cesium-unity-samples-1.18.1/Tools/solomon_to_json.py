@@ -88,7 +88,7 @@ if __name__ == "__main__":
     with open(input_file, 'r') as f:
         text = f.read()
 
-    name = input_file.rsplit('.', 1)[0].rsplit('/', 1)[-1].rsplit('\\\\', 1)[-1]
+    name = input_file.rsplit('.', 1)[0].rsplit('/', 1)[-1].rsplit('\\', 1)[-1]
     result = parse_solomon(text, name)
 
     json_str = json.dumps(result, indent=2)

@@ -1,0 +1,21 @@
+﻿Drone,RouteIndex,CustomerCount,TotalDemand,VehicleCapacity,StartTime,EndTime,TotalTime,DistanceMeters,OnTimeCount,LateCount,TotalLateness,BatteryStartPct,BatteryEndPct,BatteryUsedPct,Strategy,Completed
+V10_10,1,4,70,200,0.0,358.2,358.2,4329,0,4,200.1,100.0,94.1,5.9,Solomon I1 Insertion / Balanced,True
+V09_9,2,5,110,200,0.0,449.8,449.8,5136,0,5,378.1,100.0,92.7,7.3,Solomon I1 Insertion / Balanced,True
+V08_8,3,3,70,200,0.0,359.5,359.5,4400,0,3,159.7,100.0,94.0,6.0,Solomon I1 Insertion / Balanced,True
+V07_7,4,4,70,200,0.0,384.3,384.3,4591,0,4,151.5,100.0,93.7,6.3,Solomon I1 Insertion / Balanced,True
+V06_6,5,3,50,200,0.0,408.1,408.1,4911,0,3,206.4,100.0,93.3,6.7,Solomon I1 Insertion / Balanced,True
+V05_5,6,2,60,200,0.0,377.5,377.5,4403,0,2,116.4,100.0,94.5,5.5,Solomon I1 Insertion / Balanced,True
+V04_4,7,2,40,200,0.0,323.9,323.9,4032,0,2,111.2,100.0,94.7,5.3,Solomon I1 Insertion / Balanced,True
+V03_3,8,4,70,200,0.0,387.9,387.9,4515,0,4,247.5,100.0,93.8,6.2,Solomon I1 Insertion / Balanced,True
+V02_2,9,3,50,200,0.0,460.0,460.0,5507,0,3,333.6,100.0,92.4,7.6,Solomon I1 Insertion / Balanced,True
+V01_1,10,3,50,200,0.0,367.2,367.2,4380,0,3,157.5,100.0,94.1,5.9,Solomon I1 Insertion / Balanced,True
+V04_4,11,1,30,200,323.9,829.6,505.7,5916,0,1,435.3,94.7,86.5,8.3,Solomon I1 Insertion / Balanced,True
+V10_10,12,1,20,200,358.2,846.9,488.8,5738,0,1,513.0,94.1,86.2,7.9,Solomon I1 Insertion / Balanced,True
+V08_8,13,1,10,200,359.5,838.9,479.4,5595,0,1,511.8,94.0,86.3,7.7,Solomon I1 Insertion / Balanced,True
+V01_1,14,1,10,200,367.2,810.5,443.3,5261,0,1,494.7,94.1,87.0,7.1,Solomon I1 Insertion / Balanced,True
+V05_5,15,1,10,200,377.5,824.4,446.9,5220,0,1,501.0,94.5,87.3,7.2,Solomon I1 Insertion / Balanced,True
+V07_7,16,2,50,200,384.3,819.1,434.8,5088,0,2,994.2,93.7,86.5,7.2,Solomon I1 Insertion / Balanced,True
+V03_3,17,5,90,200,387.9,824.4,436.5,5050,0,5,2117.8,93.8,86.5,7.3,Solomon I1 Insertion / Balanced,True
+V06_6,18,3,70,200,408.1,803.2,395.1,4674,0,3,1439.2,93.3,86.7,6.6,Solomon I1 Insertion / Balanced,True
+V09_9,19,1,30,200,449.8,827.0,377.2,4551,0,1,544.8,92.7,86.5,6.2,Solomon I1 Insertion / Balanced,True
+V02_2,20,1,10,200,460.0,837.6,377.6,4547,0,1,552.5,92.4,86.3,6.1,Solomon I1 Insertion / Balanced,True

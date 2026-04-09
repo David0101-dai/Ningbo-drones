@@ -110,45 +110,52 @@ public class RouteDispatcher : MonoBehaviour
         _totalRoutesPlanned = routes.Count;
         _totalRoutesCompleted = 0;
 
-        // Collect available drone names
-        var availableDrones = new Queue<string>();
-        foreach (var route in routes)
+        // Collect REAL available drone names (only drones that actually exist)
+        var realDrones = new List<string>();
+        var seen = new HashSet<DroneInfo>();
+        foreach (var kvp in commandCenter.GetFleetSnapshot())
         {
-            if (!string.IsNullOrEmpty(route.droneName) &&
-                !availableDrones.Contains(route.droneName))
-            {
-                availableDrones.Enqueue(route.droneName);
-            }
+            realDrones.Add(kvp.name);
         }
 
-        // If routes don't have drone names assigned, get from command center
-        if (availableDrones.Count == 0 && commandCenter != null)
+        if (realDrones.Count == 0)
         {
-            foreach (var snap in commandCenter.GetFleetSnapshot())
-                availableDrones.Enqueue(snap.name);
+            EmitStatus("[Dispatcher] No drones available!");
+            return 0;
         }
 
+        // Assign real drone names to routes and dispatch
         int dispatched = 0;
+        int droneIdx = 0;
 
         foreach (var route in routes)
         {
-            if (availableDrones.Count > 0 &&
-                !_activeDispatches.ContainsKey(route.droneName))
+            if (droneIdx < realDrones.Count)
             {
-                // This drone is free — dispatch immediately
+                // Assign a real drone name to this route
+                route.droneName = realDrones[droneIdx];
+
                 if (DispatchRoute(route))
+                {
                     dispatched++;
+                    droneIdx++;
+                }
+                else
+                {
+                    // Dispatch failed — queue it
+                    _pendingRoutes.Enqueue(route);
+                }
             }
             else
             {
-                // No free drone — queue for later
+                // No more free drones — queue for multi-trip
                 _pendingRoutes.Enqueue(route);
             }
         }
 
         int queued = _pendingRoutes.Count;
         EmitStatus($"[Dispatcher] Dispatched {dispatched}/{routes.Count} routes" +
-                   (queued > 0 ? $", {queued} queued for multi-trip" : ""));
+                (queued > 0 ? $", {queued} queued for multi-trip" : ""));
 
         return dispatched;
     }
