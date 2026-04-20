@@ -32,7 +32,7 @@ public class NearestFirstSolver : IRoutingSolver
 
         int n = ctx.orders.Count;
 
-        Debug.Log($"[NearestFirst] Starting: {n} customers, " +
+        DLog.Info("NNSolver", $" Starting: {n} customers, " +
                   $"{ctx.maxVehicles} vehicles, cap={ctx.vehicleCapacity}, " +
                   $"speed={ctx.speedMps:F1} m/s");
 
@@ -127,7 +127,7 @@ public class NearestFirstSolver : IRoutingSolver
         }
 
         int phase1Routed = n - unrouted.Count;
-        Debug.Log($"[NearestFirst] Phase 1 complete: {phase1Routed}/{n} routed, " +
+        DLog.Info("NNSolver", $" Phase 1 complete: {phase1Routed}/{n} routed, " +
                   $"{unrouted.Count} remaining, {routes.Count} routes");
 
         // ══════════════════════════════════════════
@@ -137,7 +137,7 @@ public class NearestFirstSolver : IRoutingSolver
         if (unrouted.Count > 0)
         {
             int inserted = InsertIntoExistingRoutes(routes, ctx, unrouted);
-            Debug.Log($"[NearestFirst] Phase 2: inserted {inserted} into existing routes, " +
+            DLog.Info("NNSolver", $" Phase 2: inserted {inserted} into existing routes, " +
                       $"{unrouted.Count} remaining");
         }
 
@@ -148,7 +148,7 @@ public class NearestFirstSolver : IRoutingSolver
         if (unrouted.Count > 0)
         {
             int newRoutes = CreateRoutesForRemaining(routes, ctx, unrouted);
-            Debug.Log($"[NearestFirst] Phase 3: created {newRoutes} new routes, " +
+            DLog.Info("NNSolver", $" Phase 3: created {newRoutes} new routes, " +
                       $"{unrouted.Count} remaining");
         }
 
@@ -158,7 +158,7 @@ public class NearestFirstSolver : IRoutingSolver
         // ══════════════════════════════════════════
         if (unrouted.Count > 0)
         {
-            Debug.LogWarning($"[NearestFirst] Phase 4 EMERGENCY: " +
+            DLog.Warn("General",$"[NearestFirst] Phase 4 EMERGENCY: " +
                              $"{unrouted.Count} still unrouted, creating solo routes");
 
             var toRemove = new List<int>(unrouted);
@@ -206,7 +206,7 @@ public class NearestFirstSolver : IRoutingSolver
         float totalDist = routes.Sum(r => r.totalDistance);
         float makespan = routes.Count > 0 ? routes.Max(r => r.totalTime) : 0;
 
-        Debug.Log($"[NearestFirst] COMPLETE:" +
+        DLog.Info("NNSolver", $" COMPLETE:" +
                   $"\\n  Customers: {totalRouted}/{n} " +
                   $"({(totalRouted >= n ? "100%" : "MISSING!")})" +
                   $"\\n  Routes: {routes.Count}" +
@@ -216,7 +216,7 @@ public class NearestFirstSolver : IRoutingSolver
                   $"\\n  Makespan: {makespan:F1}");
 
         if (totalRouted < n)
-            Debug.LogError($"[NearestFirst] FATAL: {n - totalRouted} customers lost!");
+            DLog.Error("General",$"[NearestFirst] FATAL: {n - totalRouted} customers lost!");
 
         return routes;
     }

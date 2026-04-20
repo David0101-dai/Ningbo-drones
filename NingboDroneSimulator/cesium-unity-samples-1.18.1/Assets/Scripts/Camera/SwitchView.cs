@@ -142,7 +142,7 @@ public class SwitchView : MonoBehaviour
                 info.ShowInfoPanel(_allPanelsVisible);
         }
 
-        Debug.Log($"[SwitchView] All info panels: {(_allPanelsVisible ? "SHOWN" : "HIDDEN")} ({allInfos.Length} drones)");
+        DLog.Info("View", $" All info panels: {(_allPanelsVisible ? "SHOWN" : "HIDDEN")} ({allInfos.Length} drones)");
     }
 
     // ======== Internal ========
@@ -263,7 +263,7 @@ public class SwitchView : MonoBehaviour
                 {
                     droneTargets = new Transform[] { camTarget };
                     _currentDroneIndex = 0;
-                    Debug.Log($"[SwitchView] Auto-assigned camera to {anyDrone[0].GetName()}");
+                    DLog.Info("View", $" Auto-assigned camera to {anyDrone[0].GetName()}");
                 }
             }
             else

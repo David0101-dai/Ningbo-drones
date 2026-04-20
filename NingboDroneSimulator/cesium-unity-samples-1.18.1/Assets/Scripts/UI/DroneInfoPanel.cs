@@ -29,7 +29,7 @@ public class DroneInfoPanel : MonoBehaviour
         canvas = GetComponent<Canvas>();
         if (canvas == null)
         {
-            Debug.LogError("DroneInfoPanel must be on a Canvas!");
+            DLog.Error("General","DroneInfoPanel must be on a Canvas!");
             return;
         }
         canvas.enabled = false;

@@ -102,7 +102,7 @@ public class SimSpeedController : MonoBehaviour
             SimClock.Instance.SetSpeed(multiplier);
 
         UpdateLabel();
-        Debug.Log($"[SimSpeed] Set to {multiplier}x (timeScale={Time.timeScale})");
+        DLog.Info("SimSpeed", $" Set to {multiplier}x (timeScale={Time.timeScale})");
     }
 
     // ════════════════════════════════════
@@ -132,7 +132,7 @@ public class SimSpeedController : MonoBehaviour
 
         UpdateLabel();
         UpdatePauseButtonText();
-        Debug.Log($"[SimSpeed] {(_isPaused ? "PAUSED" : $"RESUMED at {speedOptions[_currentIndex]}x")}");
+        DLog.Info("SimSpeed", $" {(_isPaused ? "PAUSED" : $"RESUMED at {speedOptions[_currentIndex]}x")}");
     }
 
     // ════════════════════════════════════

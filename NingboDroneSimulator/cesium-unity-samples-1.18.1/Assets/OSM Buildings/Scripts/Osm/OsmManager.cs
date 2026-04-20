@@ -72,7 +72,7 @@ namespace BeanStudio
             {
                 default:
                 case RequestType.None:
-                    Debug.LogError("Request type not mentioned!");
+                    DLog.Error("General","Request type not mentioned!");
                     break;
                 case RequestType.Building:
                     using (UnityWebRequest request = UnityWebRequest.Get(uri))

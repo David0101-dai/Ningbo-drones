@@ -104,6 +104,11 @@ public class UIPanelManager : MonoBehaviour
     private int _selectedSpeedIndex = 2;
 
     // ================================================================
+    //  Helper: newline constant to avoid \\\\n vs \\n confusion everywhere
+    // ================================================================
+    private static readonly string NL = System.Environment.NewLine;
+
+    // ================================================================
     //  Awake
     // ================================================================
     void Awake()
@@ -345,7 +350,7 @@ public class UIPanelManager : MonoBehaviour
         if (_logFiles.Count == 0)
         {
             logFileDropdown.AddOptions(new List<string> { "(no log files)" });
-            UpdateOutputText("Replay Mode: No log files found.\\nFly and save a log first.");
+            UpdateOutputText("Replay Mode: No log files found." + NL + "Fly and save a log first.");
             return;
         }
 
@@ -391,7 +396,7 @@ public class UIPanelManager : MonoBehaviour
             return;
         }
 
-        UpdateOutputText($"Loading: {FormatLogFileName(fileName)}...");
+        UpdateOutputText("Loading: " + FormatLogFileName(fileName) + "...");
 
         ReplayManager.Instance.LoadReplayFile(fullPath);
 
@@ -445,7 +450,7 @@ public class UIPanelManager : MonoBehaviour
         if (index == 0)
         {
             replay.SelectAllDrones();
-            UpdateOutputText($"Selected: All drones ({replay.DroneNamesInLog.Count})");
+            UpdateOutputText("Selected: All drones (" + replay.DroneNamesInLog.Count + ")");
         }
         else
         {
@@ -454,7 +459,7 @@ public class UIPanelManager : MonoBehaviour
             {
                 string droneName = replay.DroneNamesInLog[droneIndex];
                 replay.SelectSingleDrone(droneName);
-                UpdateOutputText($"Selected: {droneName}");
+                UpdateOutputText("Selected: " + droneName);
             }
         }
     }
@@ -470,7 +475,7 @@ public class UIPanelManager : MonoBehaviour
         speedDropdown.ClearOptions();
         var options = new List<string>();
         for (int i = 0; i < _speedOptions.Length; i++)
-            options.Add($"{_speedOptions[i]}x");
+            options.Add(_speedOptions[i] + "x");
         speedDropdown.AddOptions(options);
 
         _selectedSpeedIndex = 2;
@@ -581,7 +586,8 @@ public class UIPanelManager : MonoBehaviour
     private void OnReplayFinished()
     {
         UpdateReplayButtonStates();
-        UpdateOutputText("Replay complete! Drone states restored.\\nSelect another file or exit replay mode.");
+        UpdateOutputText("Replay complete! Drone states restored." + NL +
+                         "Select another file or exit replay mode.");
     }
 
     // ================================================================
@@ -594,7 +600,7 @@ public class UIPanelManager : MonoBehaviour
         string text = inputField.text;
         if (string.IsNullOrWhiteSpace(text)) return;
         llm.SendUserText(text);
-        Debug.Log($"[UI] Input: {text}");
+        Debug.Log("[UI] Input: " + text);
 
         inputField.text = "";
         inputField.ActivateInputField();
@@ -613,9 +619,8 @@ public class UIPanelManager : MonoBehaviour
         if (!string.IsNullOrEmpty(path))
         {
             UpdateOutputText("Log saved: " + System.IO.Path.GetFileName(path) +
-    System.Environment.NewLine + "New recording started.");
+                             NL + "New recording started.");
 
-            // Refresh log file list if replay panel is open
             if (replayPanel && replayPanel.activeSelf)
                 RefreshLogFileDropdown();
         }
@@ -647,7 +652,7 @@ public class UIPanelManager : MonoBehaviour
         for (int i = 0; i < n; i++)
         {
             Transform t = switchView.droneTargets[i];
-            if (!t) { options.Add($"Drone_{i}"); continue; }
+            if (!t) { options.Add("Drone_" + i); continue; }
 
             var info = t.GetComponentInParent<DroneInfo>();
             options.Add(info ? info.gameObject.name : t.name);
@@ -680,12 +685,14 @@ public class UIPanelManager : MonoBehaviour
         }
 
         string pickMode = picker ? picker.mode.ToString() : "(picker missing)";
-        string se = picker ? $"Start={(picker.HasStart ? "\\u2714" : "\\u2014")}  End={(picker.HasEnd ? "\\u2714" : "\\u2014")}" : "";
+        string startMark = (picker != null && picker.HasStart) ? "\\u2714" : "\\u2014";
+        string endMark   = (picker != null && picker.HasEnd)   ? "\\u2714" : "\\u2014";
+        string se = picker != null ? ("Start=" + startMark + "  End=" + endMark) : "";
 
         string hint = "";
-        if (picker && !picker.HasEnd) hint = "\\nHint: Pick End point first";
+        if (picker && !picker.HasEnd) hint = NL + "Hint: Pick End point first";
 
-        statusText.text = $"Current: {curName}\\nPickMode: {pickMode}\\n{se}{hint}";
+        statusText.text = "Current: " + curName + NL + "PickMode: " + pickMode + NL + se + hint;
     }
 
     // ================================================================
@@ -707,7 +714,9 @@ public class UIPanelManager : MonoBehaviour
             (picker.mode == MapPickController.PickMode.PickEnd && picker.HasEnd) ? picker.EndLLH :
             new Unity.Mathematics.double3(0, 0, 0);
 
-        UpdateOutputText($"Drone: {droneName}\\nPick mode: {modeStr}\\nPos: {llh.x:F4}, {llh.y:F4}, {llh.z:F1}m");
+        UpdateOutputText("Drone: " + droneName + NL +
+                         "Pick mode: " + modeStr + NL +
+                         "Pos: " + llh.x.ToString("F4") + ", " + llh.y.ToString("F4") + ", " + llh.z.ToString("F1") + "m");
     }
 
     public void ClosePanel()

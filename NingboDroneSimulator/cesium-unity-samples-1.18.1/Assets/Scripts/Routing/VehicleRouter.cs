@@ -116,7 +116,7 @@ public class VehicleRouter : MonoBehaviour
         Debug.Log(summary);
 
         foreach (var route in routes)
-            Debug.Log($"[Router] {route}");
+            DLog.Info("Router", $" {route}");
 
         OnRoutesPlanned?.Invoke(routes);
         return routes;
@@ -156,11 +156,11 @@ public class VehicleRouter : MonoBehaviour
 
         if (unrouted.Count == 0)
         {
-            Debug.Log($"[Router SafetyNet] All {ctx.orders.Count} customers routed by solver ✓");
+            DLog.Info("Router", $" All {ctx.orders.Count} customers routed by solver ✓");
             return routes;
         }
 
-        Debug.LogWarning($"[Router SafetyNet] Solver left {unrouted.Count}/{ctx.orders.Count} " +
+        DLog.Warn("General",$"[Router SafetyNet] Solver left {unrouted.Count}/{ctx.orders.Count} " +
                         $"customers unrouted! Force-inserting...");
 
         // Try to insert into existing routes (cheapest position, ignore TW)
@@ -220,7 +220,7 @@ public class VehicleRouter : MonoBehaviour
 
                 inserted = true;
 
-                Debug.Log($"[Router SafetyNet] Inserted C{order.customerNumber:D3} " +
+                DLog.Info("Router", $" Inserted C{order.customerNumber:D3} " +
                         $"into existing route (pos={bestPos}, demand={order.demand})");
             }
 
@@ -280,7 +280,7 @@ public class VehicleRouter : MonoBehaviour
 
             routes.Add(overflowRoute);
 
-            Debug.Log($"[Router SafetyNet] Created overflow route: " +
+            DLog.Info("Router", $" Created overflow route: " +
                     $"{overflowRoute.customerCount} customers, " +
                     $"demand={overflowRoute.totalDemand}");
 
@@ -316,7 +316,7 @@ public class VehicleRouter : MonoBehaviour
                                         ctx.distanceMatrix[custIdx + 1, 0];
 
                     routes.Add(solo);
-                    Debug.LogWarning($"[Router SafetyNet] EMERGENCY solo route for " +
+                    DLog.Warn("General",$"[Router SafetyNet] EMERGENCY solo route for " +
                                     $"C{order.customerNumber:D3}");
                 }
                 stillUnrouted.Clear();
@@ -324,7 +324,7 @@ public class VehicleRouter : MonoBehaviour
         }
 
         int finalCount = routes.Sum(r => r.DeliveryStopCount);
-        Debug.Log($"[Router SafetyNet] Final: {finalCount}/{ctx.orders.Count} customers " +
+        DLog.Info("Router", $" Final: {finalCount}/{ctx.orders.Count} customers " +
                 $"in {routes.Count} routes");
 
         return routes;
@@ -399,7 +399,7 @@ public class VehicleRouter : MonoBehaviour
             return SolverRegistry.Instance.ActiveSolver;
 
         // Fallback: create inline Solomon solver
-        Debug.LogWarning("[Router] SolverRegistry not found, using fallback SolomonI1");
+        DLog.Warn("General","[Router] SolverRegistry not found, using fallback SolomonI1");
         return new SolomonI1Solver();
     }
 

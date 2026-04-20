@@ -35,7 +35,7 @@ public class GreedyInsertionSolver : IRoutingSolver
         int n = ctx.orders.Count;
         int K = ctx.maxVehicles; // Use ALL drones
 
-        Debug.Log($"[GreedyInsertion] Starting: {n} customers, " +
+        DLog.Info("Greedy", $" Starting: {n} customers, " +
                   $"{K} drones, capacity={ctx.vehicleCapacity}, " +
                   $"speed={ctx.speedMps:F1} m/s");
 
@@ -112,7 +112,7 @@ public class GreedyInsertionSolver : IRoutingSolver
         RedistributeEmptySectors(sectors, sectorDemand, ctx);
 
         // Log sector assignment
-        Debug.Log($"[GreedyInsertion] Sector assignment ({sectors.Count(s => s.Count > 0)} active sectors):");
+        DLog.Info("Greedy", $" Sector assignment ({sectors.Count(s => s.Count > 0)} active sectors):");
         for (int s = 0; s < K; s++)
         {
             if (sectors[s].Count > 0)
@@ -170,7 +170,7 @@ public class GreedyInsertionSolver : IRoutingSolver
         {
             if (routedSet.Contains(i)) continue;
 
-            Debug.LogWarning($"[GreedyInsertion] Straggler C{ctx.orders[i].customerNumber:D3}");
+            DLog.Warn("General",$"[GreedyInsertion] Straggler C{ctx.orders[i].customerNumber:D3}");
 
             // Find route with most remaining capacity
             PlannedRoute bestRoute = null;
@@ -244,7 +244,7 @@ public class GreedyInsertionSolver : IRoutingSolver
             .Select(g => $"{g.Key}-stop:{g.Count()}")
             .ToList();
 
-        Debug.Log($"[GreedyInsertion] COMPLETE:" +
+        DLog.Info("Greedy", $" COMPLETE:" +
                   $"\\n  Customers: {totalCustomers}/{n} (100%)" +
                   $"\\n  Routes: {routes.Count} (target was {K})" +
                   $"\\n  Avg capacity utilization: {avgUtil:F1}%" +

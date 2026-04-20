@@ -77,14 +77,14 @@ public class OrderManager : MonoBehaviour
     {
         if (locationManager == null)
         {
-            Debug.LogError("[OrderManager] LocationManager not found");
+            DLog.Error("General","[OrderManager] LocationManager not found");
             return null;
         }
 
         var pickup = locationManager.GetPointByName(pickupName);
         if (pickup == null)
         {
-            Debug.LogWarning($"[OrderManager] Pickup point '{pickupName}' not found");
+            DLog.Warn("General",$"[OrderManager] Pickup point '{pickupName}' not found");
             EmitStatus($"Error: Pickup '{pickupName}' not found. Available: {string.Join(", ", locationManager.GetPointNames(LocationPoint.PointType.PickupPoint))}");
             return null;
         }
@@ -92,7 +92,7 @@ public class OrderManager : MonoBehaviour
         var delivery = locationManager.GetPointByName(deliveryName);
         if (delivery == null)
         {
-            Debug.LogWarning($"[OrderManager] Delivery point '{deliveryName}' not found");
+            DLog.Warn("General",$"[OrderManager] Delivery point '{deliveryName}' not found");
             EmitStatus($"Error: Delivery '{deliveryName}' not found. Available: {string.Join(", ", locationManager.GetPointNames(LocationPoint.PointType.DeliveryPoint))}");
             return null;
         }
@@ -118,7 +118,7 @@ public class OrderManager : MonoBehaviour
         _allOrders.Add(order);
 
         if (logAssignments)
-            Debug.Log($"[OrderManager] Created {id}: {description}");
+            DLog.Info("Orders", $" Created {id}: {description}");
 
         EmitStatus($"Order {id} created: {description} ({PendingCount} pending)");
         OnOrderCreated?.Invoke(order);
@@ -145,7 +145,7 @@ public class OrderManager : MonoBehaviour
         _allOrders.Add(order);
 
         if (logAssignments)
-            Debug.Log($"[OrderManager] Added external order: {order}");
+            DLog.Info("Orders", $" Added external order: {order}");
 
         OnOrderCreated?.Invoke(order);
     }
@@ -157,7 +157,7 @@ public class OrderManager : MonoBehaviour
     {
         if (locationManager == null)
         {
-            Debug.LogWarning("[OrderManager] LocationManager not found, cannot create test order");
+            DLog.Warn("General","[OrderManager] LocationManager not found, cannot create test order");
             return null;
         }
 
@@ -263,7 +263,7 @@ public class OrderManager : MonoBehaviour
         string path = Path.Combine(Application.persistentDataPath, "sample_orders.json");
         File.WriteAllText(path, json);
 
-        Debug.Log($"[OrderManager] Sample order file saved: {path}");
+        DLog.Info("Orders", $" Sample order file saved: {path}");
         EmitStatus($"Sample order file saved to: {path}");
         return path;
     }
@@ -271,38 +271,6 @@ public class OrderManager : MonoBehaviour
     // ================================================================
     //  Assignment Logic
     // ================================================================
-
-    private void TryAssignPendingOrders()
-    {
-        // ====== NEW: Skip auto-assignment if VehicleRouter is handling routing ======
-        if (VehicleRouter.Instance != null &&
-            VehicleRouter.Instance.LastSolution != null &&
-            VehicleRouter.Instance.LastSolution.Count > 0)
-        {
-            return; // Let RouteDispatcher handle assignments
-        }
-
-        // Also skip if Solomon data was imported (wait for user to click Solve)
-        if (SolomonImporter.Instance != null &&
-            SolomonImporter.Instance.CurrentDataset != null)
-        {
-            return; // Solomon orders should be routed via Routing tab
-        }
-
-        // ====== Original logic below (for manual orders only) ======
-        if (commandCenter == null || routeBuilder == null) return;
-
-        var pendingOrders = _allOrders.Where(o => o.status == DeliveryOrder.OrderStatus.Pending).ToList();
-        if (pendingOrders.Count == 0) return;
-
-        foreach (var order in pendingOrders)
-        {
-            string bestDrone = FindBestDroneForOrder(order);
-            if (bestDrone == null) continue;
-            AssignOrderToDrone(order, bestDrone);
-        }
-    }
-
     private string FindBestDroneForOrder(DeliveryOrder order)
     {
         var snapshots = commandCenter.GetFleetSnapshot();
@@ -345,7 +313,7 @@ public class OrderManager : MonoBehaviour
             info.AssignRoute($"Pickup {order.orderId}");
 
         if (logAssignments)
-            Debug.Log($"[OrderManager] Assigned {order.orderId} to {droneName} (picking up from {order.pickupPointName})");
+            DLog.Info("Orders", $" Assigned {order.orderId} to {droneName} (picking up from {order.pickupPointName})");
 
         EmitStatus($"{order.orderId} -> {droneName}: picking up from {order.pickupPointName}");
         OnOrderAssigned?.Invoke(order);
@@ -385,7 +353,7 @@ public class OrderManager : MonoBehaviour
     {
         if (info == null) return;
         info.OnRouteCompleted -= OnDroneRouteCompleted;
-        Debug.Log($"[OrderManager] Unsubscribed drone: {info.GetName()}");
+        DLog.Info("Orders", $" Unsubscribed drone: {info.GetName()}");
     }
 
     private void OnDroneRouteCompleted(DroneInfo droneInfo)
@@ -425,7 +393,7 @@ public class OrderManager : MonoBehaviour
             info.AssignRoute($"Deliver {order.orderId}");
 
         if (logAssignments)
-            Debug.Log($"[OrderManager] {droneName} picked up {order.orderId}, delivering to {order.deliveryPointName}");
+            DLog.Info("Orders", $" {droneName} picked up {order.orderId}, delivering to {order.deliveryPointName}");
 
         EmitStatus($"{droneName}: delivering {order.orderId} to {order.deliveryPointName}");
         OnOrderPickedUp?.Invoke(order);
@@ -440,7 +408,7 @@ public class OrderManager : MonoBehaviour
         float duration = order.completedTime - order.createdTime;
 
         if (logAssignments)
-            Debug.Log($"[OrderManager] {order.orderId} completed by {droneName} ({duration:F1}s)");
+            DLog.Info("Orders", $" {order.orderId} completed by {droneName} ({duration:F1}s)");
 
         EmitStatus($"{order.orderId} delivered by {droneName}! ({duration:F0}s)");
         OnOrderCompleted?.Invoke(order);
@@ -483,7 +451,7 @@ public class OrderManager : MonoBehaviour
         if (nearest == null || nearestDist < 20.0)
         {
             if (logAssignments && nearest != null)
-                Debug.Log($"[OrderManager] {droneName} already near {nearest.GetDisplayName()}");
+                DLog.Info("Orders", $" {droneName} already near {nearest.GetDisplayName()}");
             if (commandCenter.TryGetInfo(droneName, out var info3))
                 info3.ClearMission();
             return;
@@ -500,7 +468,7 @@ public class OrderManager : MonoBehaviour
             droneInfo.AssignRoute($"Return to {nearest.GetDisplayName()}");
 
         if (logAssignments)
-            Debug.Log($"[OrderManager] {droneName} returning to {nearest.GetDisplayName()} ({nearestDist:F0}m away)");
+            DLog.Info("Orders", $" {droneName} returning to {nearest.GetDisplayName()} ({nearestDist:F0}m away)");
     }
 
     // ================================================================
@@ -564,7 +532,7 @@ public class OrderManager : MonoBehaviour
 
     private void EmitStatus(string msg)
     {
-        Debug.Log($"[OrderManager] {msg}");
+        DLog.Info("Orders", $" {msg}");
         OnStatusChanged?.Invoke(msg);
     }
 
@@ -587,7 +555,7 @@ public class OrderManager : MonoBehaviour
         GameObject go = new GameObject(containerName);
         go.transform.SetParent(waypointsRoot, false);
 
-        Debug.Log($"[OrderManager] Created waypoint container: {containerName}");
+        DLog.Info("Orders", $" Created waypoint container: {containerName}");
         return go.transform;
     }
 
@@ -598,7 +566,7 @@ public class OrderManager : MonoBehaviour
         if (!routeBuilder.BuildRoute(startLLH, endLLH, out var route))
         {
             if (logAssignments)
-                Debug.LogWarning($"[OrderManager] Failed to plan route for {droneName}");
+                DLog.Warn("General",$"[OrderManager] Failed to plan route for {droneName}");
             return false;
         }
 
@@ -619,8 +587,45 @@ public class OrderManager : MonoBehaviour
         bool ok = nav.InjectPath(route, startNow: true);
 
         if (logAssignments && ok)
-            Debug.Log($"[OrderManager] Injected {route.Count} waypoints for {droneName}");
+            DLog.Info("Orders", $" Injected {route.Count} waypoints for {droneName}");
 
         return ok;
+    }
+
+    private bool _solomonImportActive = false;
+
+    public void SetSolomonImportActive(bool active)
+    {
+        _solomonImportActive = active;
+        DLog.Info("Orders", active
+            ? "Solomon import active — auto-assign BLOCKED"
+            : "Solomon import inactive — auto-assign ENABLED");
+    }
+
+    private void TryAssignPendingOrders()
+    {
+        // ★ 最高优先级：Solomon 模式下完全阻止
+        if (_solomonImportActive) return;
+
+        if (VehicleRouter.Instance != null &&
+            VehicleRouter.Instance.LastSolution != null &&
+            VehicleRouter.Instance.LastSolution.Count > 0)
+            return;
+
+        if (commandCenter == null || routeBuilder == null) return;
+
+        // 二次保险：即使标志未设，也不自动分配 S- 开头的订单
+        var pendingOrders = _allOrders.Where(o =>
+            o.status == DeliveryOrder.OrderStatus.Pending &&
+            !o.orderId.StartsWith("S-")).ToList();
+
+        if (pendingOrders.Count == 0) return;
+
+        foreach (var order in pendingOrders)
+        {
+            string bestDrone = FindBestDroneForOrder(order);
+            if (bestDrone == null) continue;
+            AssignOrderToDrone(order, bestDrone);
+        }
     }
 }

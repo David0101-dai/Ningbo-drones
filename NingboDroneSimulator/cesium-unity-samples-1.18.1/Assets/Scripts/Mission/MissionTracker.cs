@@ -159,7 +159,7 @@ public class MissionTracker : MonoBehaviour
         _datasetName = datasetName;
         _strategyName = strategy;
 
-        Debug.Log($"[MissionTracker] Mission started: {datasetName}, strategy={strategy}");
+        DLog.Info("Mission", $" Mission started: {datasetName}, strategy={strategy}");
     }
 
     // ================================================================
@@ -212,7 +212,7 @@ public class MissionTracker : MonoBehaviour
             coordSystem = "WGS84_degrees"
         };
 
-        Debug.Log($"[MissionTracker] Leg started: {droneName} leg#{legIndex} " +
+        DLog.Info("Mission", $" Leg started: {droneName} leg#{legIndex} " +
                   $"{originName}→{destName}, " +
                   $"straight={leg.straightLineDistM:F0}m, " +
                   $"path={leg.actualFlownDistM:F0}m ({leg.waypointCount} wps)");
@@ -257,7 +257,7 @@ public class MissionTracker : MonoBehaviour
         OnLegRecorded?.Invoke(leg);
 
         string timeStatus = leg.arrivedOnTime ? "ON TIME" : $"LATE by {simTime - leg.destDueTime:F1}";
-        Debug.Log($"[MissionTracker] Leg ended: {leg.droneName} leg#{leg.legIndex} " +
+        DLog.Info("Mission", $" Leg ended: {leg.droneName} leg#{leg.legIndex} " +
                   $"{leg.originName}→{leg.destName}: " +
                   $"dist={leg.actualFlownDistM:F0}m, time={leg.legDurationSimTime:F1}, " +
                   $"avgSpeed={leg.avgSpeedMps:F1}m/s, {timeStatus}");
@@ -303,7 +303,7 @@ public class MissionTracker : MonoBehaviour
         string status = record.wasLate ? $"LATE by {record.lateness:F0}" : "ON TIME";
         if (record.wasEarly) status += $" (waited {record.waitTime:F0})";
 
-        Debug.Log($"[MissionTracker] {droneName} → C{record.customerNumber:D3}: {status} " +
+        DLog.Info("Mission", $" {droneName} → C{record.customerNumber:D3}: {status} " +
                   $"(planned={record.plannedArrival:F0}, actual={record.actualArrival:F0}, " +
                   $"battery={record.droneBatteryAtArrival:F0}%)");
     }
@@ -368,7 +368,7 @@ public class MissionTracker : MonoBehaviour
 
         OnRouteRecorded?.Invoke(record);
 
-        Debug.Log($"[MissionTracker] Route {routeIndex} completed by {droneName}: " +
+        DLog.Info("Mission", $" Route {routeIndex} completed by {droneName}: " +
                   $"{record.onTimeCount}/{record.customerCount} on time, " +
                   $"actual distance={record.totalDistanceMeters:F0}m, " +
                   $"battery {record.batteryStartPercent:F0}%→{record.batteryEndPercent:F0}%");

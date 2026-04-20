@@ -143,7 +143,7 @@ public class RuntimeWaypointsBuilder : MonoBehaviour
             outLLH = new List<double3> { startLLH, upS, upE, endLLH };
             LastUsedFallback = true;
             LastFailReason = "No collision-free route; fallback used.";
-            Debug.LogWarning($"[RuntimeWaypointsBuilder] {LastFailReason}");
+            DLog.Warn("General",$"[RuntimeWaypointsBuilder] {LastFailReason}");
             return true;
         }
 
@@ -167,7 +167,7 @@ public class RuntimeWaypointsBuilder : MonoBehaviour
             anc.longitudeLatitudeHeight = llhPoints[i];
         }
 
-        Debug.Log($"[RuntimeWaypointsBuilder] Wrote {llhPoints.Count} points to {runtimeWaypointsParent.name} (fallback={LastUsedFallback})");
+        DLog.Info("RouteBuilder", $" Wrote {llhPoints.Count} points to {runtimeWaypointsParent.name} (fallback={LastUsedFallback})");
         return true;
     }
 

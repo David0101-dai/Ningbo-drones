@@ -197,7 +197,7 @@ public class RouteDispatcher : MonoBehaviour
             spec.currentLoad = 0;
             int totalLoad = route.totalDemand;
             spec.LoadCargo(totalLoad);
-            Debug.Log($"[Dispatcher] {droneName} loaded {totalLoad}/{spec.maxCapacity} cargo");
+            DLog.Info("Dispatch", $" {droneName} loaded {totalLoad}/{spec.maxCapacity} cargo");
         }
 
         // Set planning speed
@@ -280,7 +280,7 @@ public class RouteDispatcher : MonoBehaviour
     {
         if (_pendingRoutes.Count == 0)
         {
-            Debug.Log($"[Dispatcher] {droneName} idle — no more routes in queue " +
+            DLog.Info("Dispatch", $" {droneName} idle — no more routes in queue " +
                       $"({_totalRoutesCompleted}/{_totalRoutesPlanned} completed)");
 
             // Check if all routes are done
@@ -298,7 +298,7 @@ public class RouteDispatcher : MonoBehaviour
         // Reassign drone name to this route
         nextRoute.droneName = droneName;
 
-        Debug.Log($"[Dispatcher] {droneName} picking up next route: " +
+        DLog.Info("Dispatch", $" {droneName} picking up next route: " +
                   $"{nextRoute.customerCount} customers, demand={nextRoute.totalDemand} " +
                   $"({_pendingRoutes.Count} remaining in queue)");
 
@@ -431,7 +431,7 @@ public class RouteDispatcher : MonoBehaviour
             currentStop.order.assignedDrone = droneName;
         }
 
-        Debug.Log($"[Dispatcher] {droneName} flying to stop {stopIndex}: " +
+        DLog.Info("Dispatch", $" {droneName} flying to stop {stopIndex}: " +
                   $"{originName}→{destName} " +
                   $"(path={flightPath?.Count ?? 0} wps, RRT={routeBuilt})");
     }
@@ -644,7 +644,7 @@ public class RouteDispatcher : MonoBehaviour
             if (newSpeed > currentSpeed * 1.1f)
             {
                 nav.SetCruiseSpeed(newSpeed);
-                Debug.Log($"[Dispatcher] {droneName} speeding up: " +
+                DLog.Info("Dispatch", $" {droneName} speeding up: " +
                           $"{currentSpeed:F1} → {newSpeed:F1} m/s " +
                           $"(deadline in {timeRemaining:F0}s, " +
                           $"ETA was {eta:F0}s)");

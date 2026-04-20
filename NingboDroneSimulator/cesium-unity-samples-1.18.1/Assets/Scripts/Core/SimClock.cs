@@ -81,13 +81,13 @@ public class SimClock : MonoBehaviour
         _isRunning = true;
         _isPaused = false;
         UpdateDisplayTime();
-        Debug.Log($"[SimClock] Started at simTime={startTime:F1}");
+        DLog.Info("SimClock", $" Started at simTime={startTime:F1}");
     }
 
     public void StopSimulation()
     {
         _isRunning = false;
-        Debug.Log($"[SimClock] Stopped at simTime={_simTime:F1}");
+        DLog.Info("SimClock", $" Stopped at simTime={_simTime:F1}");
     }
 
     public void SetPaused(bool paused)
@@ -110,7 +110,7 @@ public class SimClock : MonoBehaviour
         _displaySpeedMultiplier = Mathf.Max(0.1f, multiplier);
         // Note: We do NOT use this for time calculation anymore.
         // Time.timeScale (set by SimSpeedController) handles everything.
-        Debug.Log($"[SimClock] Display speed set to {_displaySpeedMultiplier}x");
+        DLog.Info("SimClock", $" Display speed set to {_displaySpeedMultiplier}x");
     }
 
     public void SetSimTime(float time)

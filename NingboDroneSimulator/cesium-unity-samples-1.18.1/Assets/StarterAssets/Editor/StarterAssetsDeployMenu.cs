@@ -55,7 +55,7 @@ namespace StarterAssets
                 }
                 else
                 {
-                    Debug.LogError("Couldn't find Cinemachine Virtual Camera prefab");
+                    DLog.Error("General","Couldn't find Cinemachine Virtual Camera prefab");
                 }
             }
             else
@@ -90,7 +90,7 @@ namespace StarterAssets
                 }
                 else
                 {
-                    Debug.LogError("Couldn't find Starter Assets Main Camera prefab");
+                    DLog.Error("General","Couldn't find Starter Assets Main Camera prefab");
                 }
             }
             else

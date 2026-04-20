@@ -1,0 +1,21 @@
+﻿Drone,RouteIndex,CustomerCount,TotalDemand,VehicleCapacity,StartTime,EndTime,TotalTime,DistanceMeters,OnTimeCount,LateCount,TotalLateness,BatteryStartPct,BatteryEndPct,BatteryUsedPct,Strategy,Completed
+V10,1,3,40,200,0.0,232.9,232.9,3946,1,2,59.1,100.0,96.3,3.7,Solomon I1 Insertion / Economy,True
+V09,2,2,30,200,0.0,246.4,246.4,3600,0,2,95.6,100.0,96.2,3.8,Solomon I1 Insertion / Economy,True
+V08,3,6,110,200,0.0,308.9,308.9,4410,1,5,335.4,100.0,94.8,5.2,Solomon I1 Insertion / Economy,True
+V07,4,1,10,200,0.0,186.1,186.1,3681,0,1,41.8,100.0,97.0,3.0,Solomon I1 Insertion / Economy,True
+V06,5,2,30,200,0.0,294.1,294.1,4150,0,2,99.9,100.0,95.8,4.2,Solomon I1 Insertion / Economy,True
+V05,6,6,150,200,0.0,338.9,338.9,4814,0,6,430.3,100.0,94.8,5.2,Solomon I1 Insertion / Economy,True
+V04,7,2,30,200,0.0,263.9,263.9,4079,1,1,71.0,100.0,95.8,4.2,Solomon I1 Insertion / Economy,True
+V03,8,2,50,200,0.0,255.2,255.2,4040,1,1,30.2,100.0,95.9,4.1,Solomon I1 Insertion / Economy,True
+V02,9,1,10,200,0.0,346.7,346.7,5220,0,1,89.6,100.0,94.4,5.6,Solomon I1 Insertion / Economy,True
+V01,10,6,140,200,0.0,330.6,330.6,4442,1,5,378.1,100.0,94.7,5.3,Solomon I1 Insertion / Economy,True
+V07,11,1,30,200,186.1,552.1,366.0,5883,0,1,214.5,97.0,91.1,6.0,Solomon I1 Insertion / Economy,True
+V10,12,1,20,200,232.9,543.3,310.4,5734,0,1,277.1,96.3,91.3,5.0,Solomon I1 Insertion / Economy,True
+V09,13,1,10,200,246.4,617.3,370.8,5594,0,1,358.7,96.2,90.2,6.0,Solomon I1 Insertion / Economy,True
+V03,14,1,10,200,255.2,565.2,310.0,5266,0,1,293.5,95.9,90.9,5.0,Solomon I1 Insertion / Economy,True
+V04,15,1,10,200,263.9,610.5,346.6,5220,0,1,353.3,95.8,90.2,5.6,Solomon I1 Insertion / Economy,True
+V06,16,2,40,200,294.1,641.0,346.8,5141,0,2,619.7,95.8,90.1,5.6,Solomon I1 Insertion / Economy,True
+V08,17,1,20,200,308.9,606.1,297.2,5064,0,1,367.4,94.8,90.0,4.8,Solomon I1 Insertion / Economy,True
+V01,18,1,30,200,330.6,628.3,297.7,4767,0,1,348.9,94.7,89.8,4.9,Solomon I1 Insertion / Economy,True
+V05,19,2,30,200,338.9,670.7,331.7,4595,0,2,624.9,94.8,89.4,5.4,Solomon I1 Insertion / Economy,True
+V02,20,8,170,200,346.7,718.3,371.6,4948,0,8,3248.7,94.4,87.9,6.5,Solomon I1 Insertion / Economy,True

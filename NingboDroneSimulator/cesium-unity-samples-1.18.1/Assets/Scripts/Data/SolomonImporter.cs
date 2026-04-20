@@ -1,16 +1,10 @@
 // Assets/Scripts/Data/SolomonImporter.cs
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Mathematics;
 using CesiumForUnity;
 
-/// <summary>
-/// Imports a Solomon dataset into the simulation:
-/// - Maps coordinates to real-world LLH
-/// - Creates LocationPoints (Depot as SpawnPoint, Customers as DeliveryPoints)
-/// - Creates DeliveryOrders with time windows and demand
-/// - Optionally auto-spawns drones
-/// </summary>
 public class SolomonImporter : MonoBehaviour
 {
     public static SolomonImporter Instance;
@@ -23,32 +17,25 @@ public class SolomonImporter : MonoBehaviour
     public CesiumGeoreference georeference;
 
     [Header("Coordinate Mapping - Ningbo Default")]
-    [Tooltip("Center longitude of target area")]
     public double centerLongitude = 121.5500;
-    [Tooltip("Center latitude of target area")]
     public double centerLatitude = 29.8700;
-    [Tooltip("Meters per Solomon coordinate unit")]
     public double scaleMetersPerUnit = 50.0;
-    [Tooltip("Desired flight height above ground level (meters). China regulation: <120m AGL")]
-    public double flightHeight = 20.0;  // ← 改为 20m AGL
+    public double flightHeight = 20.0;
 
     [Header("Import Settings")]
-    [Tooltip("Clear existing points and orders before import")]
     public bool clearBeforeImport = true;
-    [Tooltip("Auto-spawn drones at depot")]
     public bool autoSpawnDrones = true;
-    [Tooltip("Max drones to auto-spawn (0 = use dataset vehicle count)")]
     public int maxAutoSpawnDrones = 0;
+
+    private static readonly string NL = System.Environment.NewLine;
 
     [Header("State")]
     [SerializeField] private string _lastImportName = "";
     [SerializeField] private int _lastCustomerCount = 0;
 
-    // Last imported dataset (available for other systems)
     private SolomonDataset _currentDataset;
     public SolomonDataset CurrentDataset => _currentDataset;
 
-    // ====== Events ======
     public System.Action<SolomonDataset> OnDatasetImported;
     public System.Action<string> OnImportStatus;
 
@@ -68,15 +55,22 @@ public class SolomonImporter : MonoBehaviour
     //  Main Import Pipeline
     // ================================================================
 
-    /// <summary>
-    /// Import a Solomon dataset from file path.
-    /// This is the main entry point.
-    /// </summary>
     public bool ImportFromFile(string filePath)
     {
-        EmitStatus($"Parsing file: {System.IO.Path.GetFileName(filePath)}...");
+        EmitStatus("Parsing file: " + System.IO.Path.GetFileName(filePath) + "...");
 
-        var dataset = SolomonParser.ParseFile(filePath);
+        SolomonDataset dataset = null;
+        try
+        {
+            dataset = SolomonParser.ParseFile(filePath);
+        }
+        catch (System.Exception e)
+        {
+            DLog.Error("General", "[SolomonImporter] EXCEPTION parsing file: " + e);
+            EmitStatus("[!] Exception parsing file: " + e.Message);
+            return false;
+        }
+
         if (dataset == null || dataset.CustomerCount == 0)
         {
             EmitStatus("[!] Failed to parse file or no customers found");
@@ -86,74 +80,188 @@ public class SolomonImporter : MonoBehaviour
         return ImportDataset(dataset);
     }
 
-    /// <summary>
-    /// Import a pre-parsed Solomon dataset.
-    /// </summary>
     public bool ImportDataset(SolomonDataset dataset)
     {
-        if (dataset == null) return false;
+        Debug.Log("========== [SolomonImporter] BEGIN IMPORT: " + dataset.name + " ==========");
 
-        _currentDataset = dataset;
+        // ★ FIX #1: Block auto-assign at the very start — and NEVER unblock inside ClearExistingData
+        if (OrderManager.Instance != null)
+            OrderManager.Instance.SetSolomonImportActive(true);
+
         _lastImportName = dataset.name;
         _lastCustomerCount = dataset.CustomerCount;
 
-        EmitStatus($"Importing '{dataset.name}': {dataset.CustomerCount} customers, " +
-                   $"{dataset.vehicleCount} vehicles (cap={dataset.vehicleCapacity})");
+        EmitStatus("Importing '" + dataset.name + "': " + dataset.CustomerCount +
+                   " customers, " + dataset.vehicleCount + " vehicles (cap=" +
+                   dataset.vehicleCapacity + ")");
 
-        // Step 1: Apply coordinate mapping
-        ApplyCoordinateMapping(dataset);
+        // ── Step 1: Coordinate Mapping ──
+        try
+        {
+            ApplyCoordinateMapping(dataset);
+            Debug.Log("[SolomonImporter] Step 1 OK: Coordinate mapping applied");
+        }
+        catch (System.Exception e)
+        {
+            DLog.Error("General", "[SolomonImporter] EXCEPTION in Step 1 (CoordinateMapping): " + e);
+            EmitStatus("[!] Failed at coordinate mapping: " + e.Message);
+            return false;
+        }
 
-        // Step 2: Clear existing data if needed
+        // ── Step 2: Clear Existing Data ──
         if (clearBeforeImport)
         {
             ClearExistingData();
         }
 
-        // Step 3: Create depot as SpawnPoint
-        CreateDepot(dataset);
+        Debug.Log("[SolomonImporter] Step 2 OK: Existing data cleared");
 
-        // Step 4: Create all customers as delivery points + orders
-        int ordersCreated = CreateCustomerOrders(dataset);
+        // Refresh location manager to purge any zombie references from Destroy()
+        if (locationManager != null)
+            locationManager.RefreshPoints();
 
-        // Step 5: Auto-spawn drones
+        _currentDataset = dataset;
+
+        // ── Step 3: Create Depot ──
+        string depotName = "Depot_" + dataset.name;
+        try
+        {
+            CreateDepot(dataset);
+            Debug.Log("[SolomonImporter] Step 3 OK: CreateDepot called for '" + depotName + "'");
+        }
+        catch (System.Exception e)
+        {
+            DLog.Error("General", "[SolomonImporter] EXCEPTION in Step 3 (CreateDepot): " + e);
+            EmitStatus("[!] Failed to create depot: " + e.Message);
+            return false;
+        }
+
+        // Verify depot actually exists
+        try
+        {
+            if (locationManager != null)
+            {
+                var depotCheck = locationManager.GetPointByName(depotName);
+                if (depotCheck == null)
+                {
+                    var spawns = locationManager.GetSpawnPoints();
+                    if (spawns != null && spawns.Count > 0)
+                    {
+                        depotName = spawns[0].GetDisplayName();
+                        DLog.Warn("General", "[SolomonImporter] Depot not found, using fallback: " + depotName);
+                    }
+                    else
+                    {
+                        DLog.Error("General", "[SolomonImporter] CRITICAL: No depot and no spawn points!");
+                        EmitStatus("[!] No depot found. Import failed.");
+                        return false;
+                    }
+                }
+                else
+                {
+                    Debug.Log("[SolomonImporter] Step 3 VERIFIED: Depot '" + depotName + "' exists");
+                }
+            }
+        }
+        catch (System.Exception e)
+        {
+            DLog.Warn("General", "[SolomonImporter] Depot verification (non-fatal): " + e.Message);
+        }
+
+        // ── Step 4: Create Customer Orders ──
+        int ordersCreated = 0;
+        try
+        {
+            ordersCreated = CreateCustomerOrders(dataset);
+            Debug.Log("[SolomonImporter] Step 4 OK: Created " + ordersCreated + " orders");
+        }
+        catch (System.Exception e)
+        {
+            DLog.Error("General", "[SolomonImporter] EXCEPTION in Step 4 (CreateCustomerOrders): " + e);
+            EmitStatus("[!] Failed to create orders: " + e.Message);
+            return false;
+        }
+
+        // Verify orders exist
+        if (orderManager != null)
+        {
+            int totalOrders = orderManager.TotalCount;
+            int pendingOrders = orderManager.PendingCount;
+            Debug.Log("[SolomonImporter] Step 4 VERIFIED: OrderManager has " +
+                      totalOrders + " total, " + pendingOrders + " pending");
+            if (totalOrders == 0)
+            {
+                DLog.Error("General", "[SolomonImporter] WARNING: No orders in OrderManager after creation!");
+            }
+        }
+
+        // ── Step 5: Auto-spawn Drones ──
         int dronesSpawned = 0;
         if (autoSpawnDrones)
         {
-            dronesSpawned = SpawnDrones(dataset);
+            try
+            {
+                dronesSpawned = SpawnDrones(dataset, depotName);
+                Debug.Log("[SolomonImporter] Step 5 OK: Spawned " + dronesSpawned + " drones");
+            }
+            catch (System.Exception e)
+            {
+                DLog.Error("General", "[SolomonImporter] EXCEPTION in Step 5 (SpawnDrones): " + e);
+                EmitStatus("[!] Failed to spawn drones: " + e.Message);
+            }
         }
 
-        // Step 6: Start simulation clock
-        if (SimClock.Instance != null)
+        // ── Step 5b: Final refresh ──
+        try
         {
-            SimClock.Instance.StartSimulation(0f);
+            if (commandCenter != null)
+                commandCenter.Refresh();
+            StartCoroutine(RefreshCommandCenterNextFrame());
+        }
+        catch (System.Exception e)
+        {
+            DLog.Warn("General", "[SolomonImporter] Warning in post-spawn refresh: " + e.Message);
         }
 
-        string summary = $"[OK] Import complete!\\n" +
-                         $"  Dataset: {dataset.name}\\n" +
-                         $"  Customers: {dataset.CustomerCount}\\n" +
-                         $"  Orders created: {ordersCreated}\\n" +
-                         $"  Drones spawned: {dronesSpawned}\\n" +
-                         $"  Total demand: {dataset.TotalDemand}\\n" +
-                         $"  Time horizon: {dataset.TimeHorizon:F0}\\n" +
-                         $"  Area: {centerLatitude:F4}, {centerLongitude:F4}";
+        // ── Step 6: Start simulation clock ──
+        try
+        {
+            if (SimClock.Instance != null)
+                SimClock.Instance.StartSimulation(0f);
+        }
+        catch (System.Exception e)
+        {
+            DLog.Warn("General", "[SolomonImporter] Warning starting SimClock: " + e.Message);
+        }
+
+        // ── Final Summary ──
+        string summary = "[OK] Import complete!" + NL +
+                         "  Dataset: " + dataset.name + NL +
+                         "  Customers: " + dataset.CustomerCount + NL +
+                         "  Orders created: " + ordersCreated + NL +
+                         "  Drones spawned: " + dronesSpawned + NL +
+                         "  Total demand: " + dataset.TotalDemand + NL +
+                         "  Time horizon: " + dataset.TimeHorizon.ToString("F0") + NL +
+                         "  Area: " + centerLatitude.ToString("F4") + ", " +
+                         centerLongitude.ToString("F4");
 
         EmitStatus(summary);
-        Debug.Log($"[SolomonImporter] {summary}");
+        Debug.Log("[SolomonImporter] " + summary);
+        Debug.Log("========== [SolomonImporter] END IMPORT: " + dataset.name + " ==========");
+
+        // ★ NOTE: SetSolomonImportActive remains TRUE here!
+        // Solomon orders stay blocked until Dispatch or explicit Clear.
 
         OnDatasetImported?.Invoke(dataset);
         return true;
     }
 
-// Assets/Scripts/Data/SolomonImporter.cs
-// 替换整个 ApplyCoordinateMapping() 和 MapCustomerToLLH() 方法
-
-// ================================================================
-//  Step 1: Coordinate Mapping (FIXED for Earth curvature)
-// ================================================================
+    // ================================================================
+    //  Step 1: Coordinate Mapping
+    // ================================================================
 
     private void ApplyCoordinateMapping(SolomonDataset dataset)
     {
-        // Use dataset mapping if provided, otherwise use our defaults
         if (dataset.mapping != null)
         {
             centerLongitude = dataset.mapping.centerLongitude;
@@ -172,7 +280,6 @@ public class SolomonImporter : MonoBehaviour
             };
         }
 
-        // Find coordinate bounds to center the mapping
         float minX = float.MaxValue, maxX = float.MinValue;
         float minY = float.MaxValue, maxY = float.MinValue;
 
@@ -195,57 +302,21 @@ public class SolomonImporter : MonoBehaviour
         float centerX = (minX + maxX) / 2f;
         float centerY = (minY + maxY) / 2f;
 
-        // Map each point: Solomon (x,y) → LLH
-        double metersPerDegreeLon = 111320.0 * System.Math.Cos(centerLatitude * System.Math.PI / 180.0);
+        double metersPerDegreeLon = 111320.0 *
+            System.Math.Cos(centerLatitude * System.Math.PI / 180.0);
         double metersPerDegreeLat = 110540.0;
 
-        // ====== KEY FIX: Compute depot ground-level WGS84 height ======
-        // All flight points use the SAME WGS84 height = depot's ground elevation + desired AGL
-        // This keeps all drones at the same "visual altitude" regardless of Earth curvature.
-        //
-        // For Ningbo city center, ground elevation ≈ 4-8m above WGS84 ellipsoid.
-        // We use a fixed AGL (Above Ground Level) offset.
-
-        double desiredAGL = flightHeight; // User-configured, default 20m
-
-        // First, map depot to get its lon/lat
-        double depotLon = centerLongitude;
-        double depotLat = centerLatitude;
-        if (dataset.depot != null)
-        {
-            double offsetX = (dataset.depot.x - centerX) * scaleMetersPerUnit;
-            double offsetY = (dataset.depot.y - centerY) * scaleMetersPerUnit;
-            depotLon = centerLongitude + offsetX / metersPerDegreeLon;
-            depotLat = centerLatitude + offsetY / metersPerDegreeLat;
-        }
-
-        // Estimate ground elevation at depot (simple model for flat cities)
-        // Ningbo average ground elevation: ~5m above WGS84
-        // For more accuracy, you could query Cesium terrain height at runtime.
-        double estimatedGroundElevation = 5.0; // meters above WGS84 ellipsoid
-
-        // The WGS84 height that gives us desiredAGL above ground at the depot
+        double desiredAGL = flightHeight;
+        double estimatedGroundElevation = 5.0;
         double uniformWgs84Height = estimatedGroundElevation + desiredAGL;
-
-        Debug.Log($"[SolomonImporter] Height strategy: ground≈{estimatedGroundElevation:F1}m + " +
-                $"AGL={desiredAGL:F1}m = WGS84 height {uniformWgs84Height:F1}m (uniform for all points)");
 
         if (dataset.depot != null)
             MapCustomerToLLH(dataset.depot, centerX, centerY,
-                            metersPerDegreeLon, metersPerDegreeLat, uniformWgs84Height);
+                             metersPerDegreeLon, metersPerDegreeLat, uniformWgs84Height);
 
         foreach (var c in dataset.customers)
             MapCustomerToLLH(c, centerX, centerY,
-                            metersPerDegreeLon, metersPerDegreeLat, uniformWgs84Height);
-
-        // Log spatial extent
-        double extentMetersX = (maxX - minX) * scaleMetersPerUnit;
-        double extentMetersY = (maxY - minY) * scaleMetersPerUnit;
-        Debug.Log($"[SolomonImporter] Mapped {dataset.CustomerCount + 1} points to " +
-                $"({centerLatitude:F4}, {centerLongitude:F4}), " +
-                $"scale={scaleMetersPerUnit}m/unit, " +
-                $"extent={extentMetersX:F0}m × {extentMetersY:F0}m, " +
-                $"flight AGL={desiredAGL:F0}m");
+                             metersPerDegreeLon, metersPerDegreeLat, uniformWgs84Height);
     }
 
     private void MapCustomerToLLH(SolomonCustomer c, float centerX, float centerY,
@@ -256,113 +327,220 @@ public class SolomonImporter : MonoBehaviour
 
         c.longitude = centerLongitude + offsetMetersX / metersPerDegreeLon;
         c.latitude = centerLatitude + offsetMetersY / metersPerDegreeLat;
-
-        // ====== KEY FIX: Use uniform WGS84 height for ALL points ======
-        // This ensures all drones fly at the same visual altitude
-        // regardless of Earth curvature across the mapped area.
         c.height = uniformHeight;
     }
 
-
-
     // ================================================================
-    //  Step 2: Clear Existing Data (FIXED)
+    //  Step 2: Clear Existing Data
     // ================================================================
 
     private void ClearExistingData()
     {
         EmitStatus("Clearing previous simulation data...");
 
-        // 1. Clear route dispatcher state FIRST (stops all active flights)
-        if (RouteDispatcher.Instance != null)
-            RouteDispatcher.Instance.ClearAll();
+        _currentDataset = null;
 
-        // 2. Clear VehicleRouter last solution
+        // Refresh CommandCenter first
+        if (commandCenter != null)
+        {
+            try { commandCenter.Refresh(); }
+            catch (System.Exception e)
+            { DLog.Warn("General", "[SolomonImporter] Refresh before clear: " + e.Message); }
+        }
+
+        // 1. Unsubscribe all drone events
+        try { UnsubscribeAllDroneEvents(); }
+        catch (System.Exception e)
+        { DLog.Warn("General", "[SolomonImporter] UnsubscribeAll: " + e.Message); }
+
+        // 2. Clear route dispatcher
+        if (RouteDispatcher.Instance != null)
+        {
+            try { RouteDispatcher.Instance.ClearAll(); }
+            catch (System.Exception e)
+            { DLog.Warn("General", "[SolomonImporter] RouteDispatcher.ClearAll: " + e.Message); }
+        }
+
+        // 3. Clear VehicleRouter last solution
         if (VehicleRouter.Instance != null)
         {
-            var field = typeof(VehicleRouter).GetField("_lastSolution",
-                System.Reflection.BindingFlags.NonPublic |
-                System.Reflection.BindingFlags.Instance);
-            if (field != null)
-                field.SetValue(VehicleRouter.Instance, null);
+            try
+            {
+                var field = typeof(VehicleRouter).GetField("_lastSolution",
+                    System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Instance);
+                if (field != null)
+                    field.SetValue(VehicleRouter.Instance, null);
+            }
+            catch (System.Exception e)
+            { DLog.Warn("General", "[SolomonImporter] VehicleRouter clear: " + e.Message); }
         }
 
-        // 3. Clear all orders (also stops drones with active orders)
+        // 4. Clear all orders
         if (orderManager != null)
-            orderManager.ClearAllOrders();
+        {
+            try { orderManager.ClearAllOrders(); }
+            catch (System.Exception e)
+            { DLog.Warn("General", "[SolomonImporter] ClearAllOrders: " + e.Message); }
+        }
 
-        // 4. Clear MissionTracker
+        // 5. Clear MissionTracker
         if (MissionTracker.Instance != null)
-            MissionTracker.Instance.StartMission("", "");
+        {
+            try { MissionTracker.Instance.StartMission("", ""); }
+            catch (System.Exception e)
+            { DLog.Warn("General", "[SolomonImporter] MissionTracker: " + e.Message); }
+        }
 
-        // 5. Remove ALL drones using the new immediate method
-        //    This handles both factory-spawned AND pre-placed drones.
-        //    No need for a separate RemovePreplacedDrones() anymore.
+        // 6. Remove ALL drones
         if (droneFactory != null)
         {
-            int removed = droneFactory.RemoveAllDronesImmediate();
-            droneFactory.ResetCounter();
-            EmitStatus($"Removed {removed} drones");
+            try
+            {
+                int removed = droneFactory.RemoveAllDronesImmediate();
+                droneFactory.ResetCounter();
+                Debug.Log("[SolomonImporter] Removed " + removed + " drones");
+            }
+            catch (System.Exception e)
+            { DLog.Warn("General", "[SolomonImporter] RemoveAllDrones: " + e.Message); }
         }
 
-        // 6. Remove Solomon-created location points
-        //    (Depot_xxx and Cxxx points from previous import)
+        // 7. Refresh CommandCenter AGAIN
+        if (commandCenter != null)
+        {
+            try
+            {
+                commandCenter.Refresh();
+                Debug.Log("[SolomonImporter] Post-clear registry: " +
+                          commandCenter.DroneCount + " drones");
+            }
+            catch (System.Exception e)
+            { DLog.Warn("General", "[SolomonImporter] Post-clear refresh: " + e.Message); }
+        }
+
+        // 8. Remove Solomon-created location points
         if (locationManager != null)
         {
-            int pointsRemoved = locationManager.RemovePointsWhere(p =>
+            try
             {
-                string n = p.GetDisplayName();
-                return n.StartsWith("Depot_") ||
-                    (n.StartsWith("C") && n.Length == 4 &&
-                    int.TryParse(n.Substring(1), out _));
-            });
-            EmitStatus($"Removed {pointsRemoved} location points");
+                int pointsRemoved = locationManager.RemovePointsWhere(p =>
+                {
+                    if (p == null) return false;
+                    string n = p.GetDisplayName();
+                    if (string.IsNullOrEmpty(n)) return false;
+                    if (n.StartsWith("Depot_")) return true;
+                    if (n.StartsWith("C") && n.Length >= 4)
+                    {
+                        string numPart = n.Substring(1);
+                        return int.TryParse(numPart, out _);
+                    }
+                    return false;
+                });
+                Debug.Log("[SolomonImporter] Removed " + pointsRemoved + " location points");
+
+                // ★ FIX #2: Force refresh to purge destroyed-but-not-yet-removed references
+                locationManager.RefreshPoints();
+            }
+            catch (System.Exception e)
+            { DLog.Warn("General", "[SolomonImporter] RemovePoints: " + e.Message); }
         }
 
-        // 7. Reset SimClock
+        // 9. Reset SimClock
         if (SimClock.Instance != null)
-            SimClock.Instance.StopSimulation();
+        {
+            try { SimClock.Instance.StopSimulation(); }
+            catch (System.Exception e)
+            { DLog.Warn("General", "[SolomonImporter] SimClock: " + e.Message); }
+        }
 
-        // 8. Reset speed to 1x
-        var speedController = FindObjectOfType<SimSpeedController>();
-        if (speedController != null)
-            speedController.ResetSpeed();
+        // 10. Reset speed
+        try
+        {
+            var speedController = FindObjectOfType<SimSpeedController>();
+            if (speedController != null) speedController.ResetSpeed();
+        }
+        catch (System.Exception e)
+        { DLog.Warn("General", "[SolomonImporter] SpeedController: " + e.Message); }
 
-        EmitStatus("Clear complete — ready for new import");
+        // 11. Clean up SwitchView
+        try
+        {
+            var switchView = FindObjectOfType<SwitchView>();
+            if (switchView != null)
+            {
+                switchView.CleanNullTargets();
+                if (switchView.droneTargets == null || switchView.droneTargets.Length == 0)
+                {
+                    if (switchView.sideView)
+                    { switchView.sideView.Follow = null; switchView.sideView.LookAt = null; }
+                    if (switchView.rearChase)
+                    { switchView.rearChase.Follow = null; switchView.rearChase.LookAt = null; }
+                }
+            }
+        }
+        catch (System.Exception e)
+        { DLog.Warn("General", "[SolomonImporter] SwitchView cleanup: " + e.Message); }
+
+        Debug.Log("[SolomonImporter] ClearExistingData COMPLETE");
+
+        // ★ FIX #1: DO NOT call SetSolomonImportActive(false) here!
+        // During import: the flag was set true by ImportDataset and must STAY true.
+        // For explicit user "Clear" actions, use ClearAndResetImport() instead.
     }
 
-    private System.Collections.IEnumerator RefreshAfterClear()
+    /// <summary>
+    /// ★ FIX #3: Call this from UI "Clear" button — NOT from inside ImportDataset.
+    /// Clears all data AND unlocks auto-assign for manual orders.
+    /// </summary>
+    public void ClearAndResetImport()
     {
-        yield return null; // Wait for Destroy to take effect
+        ClearExistingData();
+        _currentDataset = null;
+
+        if (OrderManager.Instance != null)
+            OrderManager.Instance.SetSolomonImportActive(false);
+
+        Debug.Log("[SolomonImporter] ClearAndResetImport: import flag released");
+    }
+
+    private void UnsubscribeAllDroneEvents()
+    {
+#if UNITY_2023_1_OR_NEWER
+        var allInfos = FindObjectsByType<DroneInfo>(
+            FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+        var allInfos = FindObjectsOfType<DroneInfo>(true);
+#endif
+        foreach (var info in allInfos)
+        {
+            if (info == null) continue;
+            try
+            {
+                if (OrderManager.Instance != null)
+                    OrderManager.Instance.UnsubscribeDrone(info);
+            }
+            catch { }
+        }
+    }
+
+    private IEnumerator RefreshCommandCenterNextFrame()
+    {
+        yield return null;
 
         if (commandCenter != null)
             commandCenter.Refresh();
 
-        // Ensure camera has target (might be empty temporarily)
         var switchView = FindObjectOfType<SwitchView>();
         if (switchView != null)
         {
             switchView.CleanNullTargets();
-            // Don't call EnsureCameraHasTarget here — drones haven't been spawned yet
-            // Cameras will detach temporarily, which is fine
-            if (switchView.droneTargets == null || switchView.droneTargets.Length == 0)
-            {
-                if (switchView.sideView) { switchView.sideView.Follow = null; switchView.sideView.LookAt = null; }
-                if (switchView.rearChase) { switchView.rearChase.Follow = null; switchView.rearChase.LookAt = null; }
-            }
+            if (switchView.droneTargets != null && switchView.droneTargets.Length > 0)
+                switchView.SelectDroneByIndex(0);
+            switchView.EnsureCameraHasTarget();
         }
-    }
 
-    private System.Collections.IEnumerator RefreshCommandCenterNextFrame()
-    {
-        yield return null;
-        if (commandCenter != null)
-            commandCenter.Refresh();
-
-        // Also refresh SwitchView
-        var switchView = FindObjectOfType<SwitchView>();
-        if (switchView != null && switchView.droneTargets != null && switchView.droneTargets.Length > 0)
-            switchView.SelectDroneByIndex(0);
+        Debug.Log("[SolomonImporter] Post-spawn refresh complete. Drones: " +
+                  (commandCenter != null ? commandCenter.DroneCount : 0));
     }
 
     // ================================================================
@@ -371,17 +549,46 @@ public class SolomonImporter : MonoBehaviour
 
     private void CreateDepot(SolomonDataset dataset)
     {
-        if (dataset.depot == null || locationManager == null) return;
+        if (dataset.depot == null)
+        {
+            DLog.Error("General", "[SolomonImporter] CreateDepot: dataset.depot is NULL!");
+            return;
+        }
+        if (locationManager == null)
+        {
+            DLog.Error("General", "[SolomonImporter] CreateDepot: locationManager is NULL!");
+            return;
+        }
 
-        string depotName = $"Depot_{dataset.name}";
+        string depotName = "Depot_" + dataset.name;
+
+        try
+        {
+            var existing = locationManager.GetPointByName(depotName);
+            if (existing != null)
+            {
+                DLog.Warn("General", "[SolomonImporter] Depot '" + depotName +
+                                 "' already exists after clear! Removing...");
+                locationManager.RemovePointsWhere(p =>
+                    p != null && p.GetDisplayName() == depotName);
+                locationManager.RefreshPoints();
+            }
+        }
+        catch (System.Exception e)
+        {
+            DLog.Warn("General", "[SolomonImporter] Error checking existing depot: " + e.Message);
+        }
+
+        double3 depotLLH = dataset.depot.GetLLH();
+        Debug.Log("[SolomonImporter] Creating depot '" + depotName + "' at LLH(" +
+                  depotLLH.x.ToString("F6") + ", " + depotLLH.y.ToString("F6") + ", " +
+                  depotLLH.z.ToString("F1") + ")");
+
         locationManager.CreatePointFromMapPick(
             depotName,
             LocationPoint.PointType.SpawnPoint,
-            dataset.depot.GetLLH()
+            depotLLH
         );
-
-        Debug.Log($"[SolomonImporter] Created depot '{depotName}' at " +
-                  $"({dataset.depot.latitude:F4}, {dataset.depot.longitude:F4})");
     }
 
     // ================================================================
@@ -390,49 +597,64 @@ public class SolomonImporter : MonoBehaviour
 
     private int CreateCustomerOrders(SolomonDataset dataset)
     {
-        if (orderManager == null || locationManager == null) return 0;
+        if (orderManager == null)
+        {
+            DLog.Error("General", "[SolomonImporter] CreateCustomerOrders: orderManager is NULL!");
+            return 0;
+        }
+        if (locationManager == null)
+        {
+            DLog.Error("General", "[SolomonImporter] CreateCustomerOrders: locationManager is NULL!");
+            return 0;
+        }
 
         int created = 0;
 
-        // The depot is both pickup (warehouse) and the return point
         double3 depotLLH = dataset.depot != null
             ? dataset.depot.GetLLH()
             : new double3(centerLongitude, centerLatitude, flightHeight);
 
         foreach (var customer in dataset.customers)
         {
-            // Create delivery point for this customer
-            string pointName = $"C{customer.id:D3}";
-            locationManager.CreatePointFromMapPick(
-                pointName,
-                LocationPoint.PointType.DeliveryPoint,
-                customer.GetLLH()
-            );
+            try
+            {
+                string pointName = "C" + customer.id.ToString("D3");
+                locationManager.CreatePointFromMapPick(
+                    pointName,
+                    LocationPoint.PointType.DeliveryPoint,
+                    customer.GetLLH()
+                );
 
-            // Create order: Depot → Customer
-            string orderId = $"S-{dataset.name}-{customer.id:D3}";
-            string description = $"C{customer.id} [D={customer.demand}]";
+                string orderId = "S-" + dataset.name + "-" + customer.id.ToString("D3");
+                string description = "C" + customer.id + " [D=" + customer.demand + "]";
 
-            var order = new DeliveryOrder(
-                orderId,
-                depotLLH,           // Pickup from depot
-                customer.GetLLH(),  // Deliver to customer
-                customer.demand,
-                customer.readyTime,
-                customer.dueDate,
-                customer.serviceTime,
-                description
-            );
+                var order = new DeliveryOrder(
+                    orderId,
+                    depotLLH,
+                    customer.GetLLH(),
+                    customer.demand,
+                    customer.readyTime,
+                    customer.dueDate,
+                    customer.serviceTime,
+                    description
+                );
 
-            order.customerNumber = customer.id;
-            order.pickupPointName = $"Depot_{dataset.name}";
-            order.deliveryPointName = pointName;
+                order.customerNumber = customer.id;
+                order.pickupPointName = "Depot_" + dataset.name;
+                order.deliveryPointName = pointName;
 
-            orderManager.AddExternalOrder(order);
-            created++;
+                orderManager.AddExternalOrder(order);
+                created++;
+            }
+            catch (System.Exception e)
+            {
+                DLog.Error("General", "[SolomonImporter] Error creating order for customer " +
+                               customer.id + ": " + e);
+            }
         }
 
-        Debug.Log($"[SolomonImporter] Created {created} orders from {dataset.CustomerCount} customers");
+        Debug.Log("[SolomonImporter] Created " + created + "/" +
+                  dataset.CustomerCount + " orders");
         return created;
     }
 
@@ -440,16 +662,44 @@ public class SolomonImporter : MonoBehaviour
     //  Step 5: Auto-spawn Drones
     // ================================================================
 
-    private int SpawnDrones(SolomonDataset dataset)
+    private int SpawnDrones(SolomonDataset dataset, string depotName)
     {
-        if (droneFactory == null) return 0;
+        if (droneFactory == null)
+        {
+            DLog.Error("General", "[SolomonImporter] SpawnDrones: droneFactory is NULL!");
+            return 0;
+        }
 
         int count = maxAutoSpawnDrones > 0
             ? Mathf.Min(maxAutoSpawnDrones, dataset.vehicleCount)
-            : Mathf.Min(dataset.vehicleCount, 10); // Cap at 10 for performance
+            : Mathf.Min(dataset.vehicleCount, 10);
 
-        string depotName = $"Depot_{dataset.name}";
-        int spawned = 0;
+        // ★ FIX #2b: Re-lookup depot FRESH, skip destroyed references
+        if (locationManager != null)
+        {
+            locationManager.RefreshPoints(); // purge zombies
+
+            var depot = locationManager.GetPointByName(depotName);
+            if (depot == null || !depot)      // Unity null check: catches destroyed objects
+            {
+                DLog.Warn("General", "[SolomonImporter] Depot '" + depotName +
+                          "' not found, trying fallback...");
+                var spawns = locationManager.GetSpawnPoints();
+                // Filter out any destroyed spawn points
+                spawns?.RemoveAll(p => p == null || !p);
+                if (spawns != null && spawns.Count > 0)
+                {
+                    depotName = spawns[0].GetDisplayName();
+                    DLog.Warn("General", "[SolomonImporter] Using fallback spawn: " + depotName);
+                }
+                else
+                {
+                    DLog.Error("General", "[SolomonImporter] No valid spawn point! Cannot spawn drones.");
+                    EmitStatus("[!] No spawn point found. Drones not created.");
+                    return 0;
+                }
+            }
+        }
 
         Color[] colors = new Color[]
         {
@@ -459,28 +709,43 @@ public class SolomonImporter : MonoBehaviour
             new Color(0.5f, 1f, 0.5f), new Color(1f, 0.5f, 1f)
         };
 
+        if (commandCenter != null)
+            commandCenter.Refresh();
+
+        int spawned = 0;
         for (int i = 0; i < count; i++)
         {
-            string droneName = $"V{(i + 1):D2}";
+            string droneName = "V" + (i + 1).ToString("D2");
             Color color = colors[i % colors.Length];
 
-            var drone = droneFactory.SpawnDrone(droneName, depotName, color);
-            if (drone != null)
+            try
             {
-                // Set capacity from dataset
-                var spec = drone.GetComponent<DroneSpec>();
-                if (spec != null)
+                var drone = droneFactory.SpawnDrone(droneName, depotName, color);
+                if (drone != null)
                 {
-                    spec.maxCapacity = dataset.vehicleCapacity;
-                    spec.currentLoad = 0;
+                    var spec = drone.GetComponent<DroneSpec>();
+                    if (spec != null)
+                    {
+                        spec.maxCapacity = dataset.vehicleCapacity;
+                        spec.currentLoad = 0;
+                    }
+                    spawned++;
                 }
-                spawned++;
+                else
+                {
+                    DLog.Error("General", "[SolomonImporter] SpawnDrone returned null for '" +
+                                   droneName + "' at '" + depotName + "'");
+                }
+            }
+            catch (System.Exception e)
+            {
+                DLog.Error("General", "[SolomonImporter] Exception spawning drone '" +
+                               droneName + "': " + e);
             }
         }
 
-        Debug.Log($"[SolomonImporter] Spawned {spawned}/{count} drones at {depotName}");
+        Debug.Log("[SolomonImporter] Spawned " + spawned + "/" + count + " drones at " + depotName);
 
-        // ★ 新增：确保摄像机跟踪新生成的无人机 ★
         var switchView = FindObjectOfType<SwitchView>();
         if (switchView != null)
         {
@@ -491,22 +756,28 @@ public class SolomonImporter : MonoBehaviour
         return spawned;
     }
 
+    private int SpawnDrones(SolomonDataset dataset)
+    {
+        return SpawnDrones(dataset, "Depot_" + dataset.name);
+    }
+
     // ================================================================
     //  Public Queries
     // ================================================================
 
-    /// <summary>Get import summary text</summary>
     public string GetImportSummary()
     {
         if (_currentDataset == null)
             return "No dataset imported";
 
-        return $"Dataset: {_currentDataset.name}\\n" +
-               $"Customers: {_currentDataset.CustomerCount}\\n" +
-               $"Vehicles: {_currentDataset.vehicleCount} (cap={_currentDataset.vehicleCapacity})\\n" +
-               $"Total Demand: {_currentDataset.TotalDemand}\\n" +
-               $"Time Horizon: {_currentDataset.TimeHorizon:F0}\\n" +
-               $"Mapped to: ({centerLatitude:F4}, {centerLongitude:F4})";
+        return "Dataset: " + _currentDataset.name + NL +
+               "Customers: " + _currentDataset.CustomerCount + NL +
+               "Vehicles: " + _currentDataset.vehicleCount +
+               " (cap=" + _currentDataset.vehicleCapacity + ")" + NL +
+               "Total Demand: " + _currentDataset.TotalDemand + NL +
+               "Time Horizon: " + _currentDataset.TimeHorizon.ToString("F0") + NL +
+               "Mapped to: (" + centerLatitude.ToString("F4") + ", " +
+               centerLongitude.ToString("F4") + ")";
     }
 
     // ================================================================
@@ -515,7 +786,7 @@ public class SolomonImporter : MonoBehaviour
 
     private void EmitStatus(string msg)
     {
-        Debug.Log($"[SolomonImporter] {msg}");
+        Debug.Log("[SolomonImporter] " + msg);
         OnImportStatus?.Invoke(msg);
     }
 }

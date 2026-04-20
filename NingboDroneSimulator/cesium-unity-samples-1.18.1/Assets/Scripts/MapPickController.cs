@@ -100,7 +100,7 @@ public class MapPickController : MonoBehaviour
                 startMarker.gameObject.SetActive(true);
             }
 
-            Debug.Log($"[Pick] Start set (lifted {pickHeightOffsetMeters}m) LLH=({_startLLH.x},{_startLLH.y},{_startLLH.z})");
+            DLog.Info("Pick", $" Start set (lifted {pickHeightOffsetMeters}m) LLH=({_startLLH.x},{_startLLH.y},{_startLLH.z})");
         }
         else if (mode == PickMode.PickEnd)
         {
@@ -114,7 +114,7 @@ public class MapPickController : MonoBehaviour
                 endMarker.gameObject.SetActive(true);
             }
 
-            Debug.Log($"[Pick] End set (lifted {pickHeightOffsetMeters}m) LLH=({_endLLH.x},{_endLLH.y},{_endLLH.z})");
+            DLog.Info("Pick", $" End set (lifted {pickHeightOffsetMeters}m) LLH=({_endLLH.x},{_endLLH.y},{_endLLH.z})");
         }
     }
 

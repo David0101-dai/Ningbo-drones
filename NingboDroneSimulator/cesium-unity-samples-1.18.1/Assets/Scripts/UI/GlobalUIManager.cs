@@ -9,15 +9,27 @@ public class GlobalUIManager : MonoBehaviour
 
     void Awake()
     {
-        if (!llmPanel) llmPanel = FindObjectOfType<Canvas>()?.gameObject;
-        if (!panelManager) panelManager = llmPanel?.GetComponent<UIPanelManager>();
-        if (!resizeController) resizeController = llmPanel?.GetComponent<PanelResizeController>();
+        // ★ FIX: 精确查找 LLMPanel，而不是随机找第一个 Canvas
+        if (!llmPanel)
+        {
+            var upm = FindObjectOfType<UIPanelManager>(true); // true = include inactive
+            if (upm != null)
+                llmPanel = upm.gameObject;
+        }
 
-        if (llmPanel) llmPanel.SetActive(false);
+        if (!panelManager && llmPanel)
+            panelManager = llmPanel.GetComponent<UIPanelManager>();
+        if (!resizeController && llmPanel)
+            resizeController = llmPanel.GetComponent<PanelResizeController>();
+
+        if (llmPanel)
+            llmPanel.SetActive(false);
     }
 
     void Update()
     {
+        if (llmPanel == null) return;
+
         // Tab: toggle panel open/close
         if (Input.GetKeyDown(KeyCode.Tab))
         {
@@ -26,7 +38,6 @@ public class GlobalUIManager : MonoBehaviour
 
             if (!isActive)
             {
-                // Opening panel
                 if (panelManager) panelManager.ResetToDefaultMode();
                 if (resizeController) resizeController.OnPanelOpened();
             }
@@ -38,7 +49,7 @@ public class GlobalUIManager : MonoBehaviour
             llmPanel.SetActive(false);
         }
 
-        // M key: quick toggle full/mini mode (while panel is open)
+        // M key: toggle full/mini mode (while panel is open)
         if (Input.GetKeyDown(KeyCode.M) && llmPanel.activeSelf)
         {
             if (resizeController) resizeController.ToggleMode();

@@ -33,7 +33,7 @@ namespace StarterAssets
                 }
                 else
                 {
-                    Debug.LogError("Couldn't find player armature prefab");
+                    DLog.Error("General","Couldn't find player armature prefab");
                 }
             }
             else
@@ -66,7 +66,7 @@ namespace StarterAssets
                 }
                 else
                 {
-                    Debug.LogError("Couldn't find player capsule prefab");
+                    DLog.Error("General","Couldn't find player capsule prefab");
                 }
             }
             else

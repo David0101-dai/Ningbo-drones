@@ -49,7 +49,7 @@ public class MissionPanelController : MonoBehaviour
     public Button solveRoutesButton;
     public Button dispatchAllButton;
     public Button stopAllButton;
-    public TMP_Dropdown speedModeDropdown;  // ← 新增
+    public TMP_Dropdown speedModeDropdown;
     public Button exportReportButton;
     public Button refreshStatusButton;
 
@@ -63,6 +63,11 @@ public class MissionPanelController : MonoBehaviour
         new Color(1f, 0.5f, 0f), Color.magenta, Color.red
     };
     private int _colorIndex = 0;
+
+    // Newline constant — immune to copy-paste escape corruption
+    private static readonly string NL = System.Environment.NewLine;
+
+    private bool _dispatching = false;
 
     // References
     private DroneFactory _factory;
@@ -79,7 +84,6 @@ public class MissionPanelController : MonoBehaviour
     private string _pendingPointName = "";
     private LocationPoint.PointType _pendingPointType;
     private List<string> _solomonFilePaths = new List<string>();
-
 
     void Awake()
     {
@@ -129,7 +133,7 @@ public class MissionPanelController : MonoBehaviour
                 _locationManager.CreatePointFromMapPick(_pendingPointName, _pendingPointType, llh);
                 _picker.Clear();
                 RefreshPointsTab();
-                SetOutput($"[OK] Point '{_pendingPointName}' placed successfully");
+                SetOutput("[OK] Point '" + _pendingPointName + "' placed successfully");
             }
         }
     }
@@ -193,7 +197,6 @@ public class MissionPanelController : MonoBehaviour
             strategyDropdown.onValueChanged.AddListener(OnStrategyChanged);
         }
 
-        // 新增：速度模式
         if (speedModeDropdown != null)
         {
             speedModeDropdown.onValueChanged.RemoveAllListeners();
@@ -253,7 +256,8 @@ public class MissionPanelController : MonoBehaviour
         var drone = _factory.SpawnDrone(name, spawnName, color);
         if (drone != null)
         {
-            SetOutput($"[OK] Drone '{drone.name}' deployed at {spawnName}\\n\\nIt will receive orders automatically when idle.");
+            SetOutput("[OK] Drone '" + drone.name + "' deployed at " + spawnName + NL + NL +
+                      "It will receive orders automatically when idle.");
             if (droneNameInput) droneNameInput.text = "";
             RefreshDroneListDropdown();
         }
@@ -273,8 +277,8 @@ public class MissionPanelController : MonoBehaviour
 
         bool ok = _factory.RemoveDrone(droneName);
         SetOutput(ok
-            ? $"[OK] Drone '{droneName}' removed from fleet"
-            : $"[FAIL] Could not remove '{droneName}'");
+            ? "[OK] Drone '" + droneName + "' removed from fleet"
+            : "[FAIL] Could not remove '" + droneName + "'");
         RefreshDroneListDropdown();
     }
 
@@ -326,7 +330,7 @@ public class MissionPanelController : MonoBehaviour
         _picker.SetPickEnd();
         _waitingForPointPick = true;
 
-        SetOutput($"Click on the map to place '{name}' ({_pendingPointType})");
+        SetOutput("Click on the map to place '" + name + "' (" + _pendingPointType + ")");
     }
 
     // ================================================================
@@ -405,7 +409,7 @@ public class MissionPanelController : MonoBehaviour
             string status = _orderManager.GetStatusText();
 
             if (_solomonImporter != null && _solomonImporter.CurrentDataset != null)
-                status += "\\n--- Solomon Dataset ---\\n" + _solomonImporter.GetImportSummary();
+                status += NL + "--- Solomon Dataset ---" + NL + _solomonImporter.GetImportSummary();
 
             SetOutput(status);
         }
@@ -428,7 +432,8 @@ public class MissionPanelController : MonoBehaviour
 
         var order = _orderManager.CreateOrderByNames(pickup, delivery);
         if (order != null)
-            SetOutput($"[OK] Order {order.orderId}: {pickup} → {delivery}\\n\\n{_orderManager.GetStatusText()}");
+            SetOutput("[OK] Order " + order.orderId + ": " + pickup + " -> " + delivery +
+                      NL + NL + _orderManager.GetStatusText());
         else
             SetOutput("[FAIL] Failed to create order. Check point names.");
     }
@@ -448,7 +453,8 @@ public class MissionPanelController : MonoBehaviour
                 _solomonFilePaths.Count > 0 &&
                 !solomonFileDropdown.options[solomonFileDropdown.value].text.StartsWith("("))
             {
-                SetOutput($"[NOTE] Using manual path (clear the path input field to use dropdown instead):\\n{manualPath}");
+                SetOutput("[NOTE] Using manual path (clear the path input field to use dropdown instead):" +
+                          NL + manualPath);
             }
 
             TryImportSolomon(manualPath);
@@ -486,7 +492,8 @@ public class MissionPanelController : MonoBehaviour
             if (!string.IsNullOrEmpty(filePath))
             {
                 int count = _orderManager.ImportOrdersFromFile(filePath);
-                SetOutput($"[OK] Legacy import: {count} orders\\n\\n{_orderManager.GetStatusText()}");
+                SetOutput("[OK] Legacy import: " + count + " orders" + NL + NL +
+                          _orderManager.GetStatusText());
                 return;
             }
         }
@@ -504,23 +511,36 @@ public class MissionPanelController : MonoBehaviour
 
         if (!File.Exists(filePath))
         {
-            SetOutput($"[FAIL] File not found:\\n{filePath}");
+            SetOutput("[FAIL] File not found:" + NL + filePath);
             return;
         }
 
-        SetOutput($"Importing Solomon dataset...\\n{Path.GetFileName(filePath)}\\nPlease wait...");
+        SetOutput("Importing Solomon dataset..." + NL +
+                  Path.GetFileName(filePath) + NL + "Please wait...");
 
-        bool success = _solomonImporter.ImportFromFile(filePath);
+        bool success = false;
+        try
+        {
+            success = _solomonImporter.ImportFromFile(filePath);
+        }
+        catch (System.Exception e)
+        {
+            DLog.Error("General","[MissionPanel] EXCEPTION during import: " + e);
+            SetOutput("[FAIL] Exception during import:" + NL + e.Message + NL +
+                      "Check console for full stack trace.");
+            return;
+        }
 
         if (success)
         {
             RefreshAllAfterImport();
             string summary = _solomonImporter.GetImportSummary();
-            SetOutput($"[OK] Solomon import successful!\\n\\n{summary}");
+            SetOutput("[OK] Solomon import successful!" + NL + NL + summary);
         }
         else
         {
-            SetOutput($"[FAIL] Solomon import failed for:\\n{filePath}\\nCheck console for details.");
+            SetOutput("[FAIL] Solomon import failed for:" + NL + filePath + NL +
+                      "Check console for details.");
         }
     }
 
@@ -541,9 +561,9 @@ public class MissionPanelController : MonoBehaviour
         var dataset = _solomonImporter.CurrentDataset;
         if (dataset.depot == null) return;
 
-        Debug.Log($"[MissionPanel] Import area center: " +
-                  $"lat={_solomonImporter.centerLatitude:F4}, " +
-                  $"lon={_solomonImporter.centerLongitude:F4}");
+        Debug.Log("[MissionPanel] Import area center: " +
+                  "lat=" + _solomonImporter.centerLatitude.ToString("F4") + ", " +
+                  "lon=" + _solomonImporter.centerLongitude.ToString("F4"));
     }
 
     private string GetSolomonHelpText()
@@ -551,18 +571,19 @@ public class MissionPanelController : MonoBehaviour
         string streamingPath = Path.Combine(Application.streamingAssetsPath, "Solomon");
         string persistentPath = Path.Combine(Application.persistentDataPath, "Solomon");
 
-        return $"[INFO] No Solomon dataset files found.\\n\\n" +
-               $"Place .txt or .json files in:\\n" +
-               $"  1. {streamingPath}\\n" +
-               $"  2. {persistentPath}\\n\\n" +
-               $"Supported: Raw .txt or converted .json";
+        return "[INFO] No Solomon dataset files found." + NL + NL +
+               "Place .txt or .json files in:" + NL +
+               "  1. " + streamingPath + NL +
+               "  2. " + persistentPath + NL + NL +
+               "Supported: Raw .txt or converted .json";
     }
 
     private void OnSolomonStatus(string msg) => SetOutput(msg);
 
     private void OnSolomonImported(SolomonDataset dataset)
     {
-        Debug.Log($"[MissionPanel] Solomon imported: {dataset.name}, {dataset.CustomerCount} customers");
+        Debug.Log("[MissionPanel] Solomon imported: " + dataset.name +
+                  ", " + dataset.CustomerCount + " customers");
         RefreshAllAfterImport();
     }
 
@@ -572,6 +593,16 @@ public class MissionPanelController : MonoBehaviour
 
     private void OnClearOrders()
     {
+        // ★ FIX: If Solomon data exists, use full clear (releases auto-assign lock)
+        if (_solomonImporter != null && _solomonImporter.CurrentDataset != null)
+        {
+            _solomonImporter.ClearAndResetImport();
+            RefreshAll();
+            SetOutput("[OK] Solomon data cleared. Auto-assign unlocked for manual orders.");
+            return;
+        }
+
+        // Fallback: just clear orders (no Solomon data active)
         if (_orderManager == null) return;
         _orderManager.ClearAllOrders();
         SetOutput("[OK] All orders cleared");
@@ -583,7 +614,7 @@ public class MissionPanelController : MonoBehaviour
 
     private void RefreshRoutingTab()
     {
-        RefreshStrategyDropdown();  // This now handles both dropdowns
+        RefreshStrategyDropdown();
         ShowRoutingStatus();
     }
 
@@ -594,10 +625,10 @@ public class MissionPanelController : MonoBehaviour
         // Orders summary
         if (_orderManager != null)
         {
-            sb.AppendLine($"Orders: {_orderManager.PendingCount} pending, " +
-                          $"{_orderManager.ActiveCount} active, " +
-                          $"{_orderManager.CompletedCount} completed " +
-                          $"(total: {_orderManager.TotalCount})");
+            sb.AppendLine("Orders: " + _orderManager.PendingCount + " pending, " +
+                          _orderManager.ActiveCount + " active, " +
+                          _orderManager.CompletedCount + " completed " +
+                          "(total: " + _orderManager.TotalCount + ")");
         }
 
         // Fleet summary
@@ -607,7 +638,8 @@ public class MissionPanelController : MonoBehaviour
             var fleet = cc.GetFleetSnapshot();
             int idle = fleet.Count(f => f.isIdle);
             int flying = fleet.Count(f => !f.isIdle && !f.isPaused);
-            sb.AppendLine($"Fleet: {fleet.Count} drones ({idle} idle, {flying} flying)");
+            sb.AppendLine("Fleet: " + fleet.Count + " drones (" + idle + " idle, " +
+                          flying + " flying)");
         }
 
         sb.AppendLine();
@@ -615,10 +647,11 @@ public class MissionPanelController : MonoBehaviour
         // Mission tracking stats (live)
         if (MissionTracker.Instance != null && MissionTracker.Instance.TotalStopsCompleted > 0)
         {
-            sb.AppendLine($"--- Live Statistics ---");
-            sb.AppendLine($"Delivered: {MissionTracker.Instance.TotalStopsCompleted}");
-            sb.AppendLine($"On time: {MissionTracker.Instance.TotalOnTime} ({MissionTracker.Instance.OnTimePercent:F1}%)");
-            sb.AppendLine($"Late: {MissionTracker.Instance.TotalLate}");
+            sb.AppendLine("--- Live Statistics ---");
+            sb.AppendLine("Delivered: " + MissionTracker.Instance.TotalStopsCompleted);
+            sb.AppendLine("On time: " + MissionTracker.Instance.TotalOnTime +
+                          " (" + MissionTracker.Instance.OnTimePercent.ToString("F1") + "%)");
+            sb.AppendLine("Late: " + MissionTracker.Instance.TotalLate);
             sb.AppendLine();
         }
 
@@ -649,7 +682,7 @@ public class MissionPanelController : MonoBehaviour
 
     private void RefreshStrategyDropdown()
     {
-        // ====== Solver Dropdown (算法选择) ======
+        // Solver Dropdown
         if (strategyDropdown != null)
         {
             strategyDropdown.ClearOptions();
@@ -666,7 +699,7 @@ public class MissionPanelController : MonoBehaviour
             }
         }
 
-        // ====== Speed Mode Dropdown (速度模式) ======
+        // Speed Mode Dropdown
         if (speedModeDropdown != null)
         {
             speedModeDropdown.ClearOptions();
@@ -693,13 +726,13 @@ public class MissionPanelController : MonoBehaviour
 
     private void OnStrategyChanged(int index)
     {
-        // Now this controls SOLVER selection
         if (SolverRegistry.Instance != null)
         {
             SolverRegistry.Instance.SetActiveSolver(index);
             string name = SolverRegistry.Instance.ActiveSolver?.Name ?? "Unknown";
             string desc = SolverRegistry.Instance.ActiveSolver?.Description ?? "";
-            SetOutput($"[OK] Solver: {name}\\n\\n{desc}\\n\\nClick 'Solve Routes' to plan.");
+            SetOutput("[OK] Solver: " + name + NL + NL + desc + NL + NL +
+                      "Click 'Solve Routes' to plan.");
         }
     }
 
@@ -716,22 +749,24 @@ public class MissionPanelController : MonoBehaviour
         };
 
         string speedStr = _router.GetPlanningSpeed().ToString("F0");
-        SetOutput($"[OK] Speed mode: {_router.strategy} ({speedStr} m/s)\\n\\n" +
-                $"This affects planning time estimates and drone flight speed.\\n" +
-                $"Click 'Solve Routes' to re-plan.");
+        SetOutput("[OK] Speed mode: " + _router.strategy + " (" + speedStr + " m/s)" + NL + NL +
+                  "This affects planning time estimates and drone flight speed." + NL +
+                  "Click 'Solve Routes' to re-plan.");
     }
 
     private void OnSolveRoutes()
     {
         if (_router == null)
         {
-            SetOutput("[FAIL] VehicleRouter not found.\\nAdd VehicleRouter to a GameObject under LLMRoot.");
+            SetOutput("[FAIL] VehicleRouter not found." + NL +
+                      "Add VehicleRouter to a GameObject under LLMRoot.");
             return;
         }
 
         if (_orderManager == null || _orderManager.TotalCount == 0)
         {
-            SetOutput("[FAIL] No orders to route.\\nImport a Solomon dataset first (Orders tab).");
+            SetOutput("[FAIL] No orders to route." + NL +
+                      "Import a Solomon dataset first (Orders tab).");
             return;
         }
 
@@ -745,7 +780,8 @@ public class MissionPanelController : MonoBehaviour
         var fleet = cc.GetFleetSnapshot();
         if (fleet.Count == 0)
         {
-            SetOutput("[FAIL] No drones available.\\nSpawn drones first (Fleet tab).");
+            SetOutput("[FAIL] No drones available." + NL +
+                      "Spawn drones first (Fleet tab).");
             return;
         }
 
@@ -764,25 +800,29 @@ public class MissionPanelController : MonoBehaviour
         if (_solomonImporter?.CurrentDataset != null)
             capacity = _solomonImporter.CurrentDataset.vehicleCapacity;
 
-        SetOutput($"Solving routes...\\n" +
-                  $"Strategy: {_router.strategy}\\n" +
-                  $"Orders: {_orderManager.PendingCount} pending\\n" +
-                  $"Fleet: {fleet.Count} drones (cap={capacity})\\n" +
-                  $"Please wait...");
+        SetOutput("Solving routes..." + NL +
+                  "Strategy: " + _router.strategy + NL +
+                  "Orders: " + _orderManager.PendingCount + " pending" + NL +
+                  "Fleet: " + fleet.Count + " drones (cap=" + capacity + ")" + NL +
+                  "Please wait...");
 
         var routes = _router.PlanRoutes(_orderManager.AllOrders, fleet, depotLLH, capacity);
 
         if (routes.Count > 0)
             SetOutput(_router.GetSolutionSummary());
         else
-            SetOutput("[FAIL] No feasible routes found.\\nCheck capacity and time windows.");
+            SetOutput("[FAIL] No feasible routes found." + NL +
+                      "Check capacity and time windows.");
     }
 
     private void OnDispatchAll()
     {
+        if (_dispatching) return;
+
         if (_router == null || _router.LastSolution == null || _router.LastSolution.Count == 0)
         {
-            SetOutput("[FAIL] No routes to dispatch.\nClick 'Solve Routes' first.");
+            SetOutput("[FAIL] No routes to dispatch." + NL +
+                    "Click 'Solve Routes' first.");
             return;
         }
 
@@ -792,32 +832,41 @@ public class MissionPanelController : MonoBehaviour
             return;
         }
 
-        // ====== KEY FIX: Reset SimClock to 0 at dispatch time ======
-        // The clock was running since import, accumulating "idle" time.
-        // Routes are planned with departure time = 0, so we must reset.
-        if (SimClock.Instance != null)
+        _dispatching = true;
+
+        try
         {
-            SimClock.Instance.StartSimulation(0f);
-            Debug.Log("[MissionPanel] SimClock reset to 0 at dispatch time");
-        }
+            if (SimClock.Instance != null)
+            {
+                SimClock.Instance.StartSimulation(0f);
+                Debug.Log("[MissionPanel] SimClock reset to 0 at dispatch time");
+            }
 
-        // Start mission tracking (now records startTime = 0)
-        if (MissionTracker.Instance != null)
+            if (MissionTracker.Instance != null)
+            {
+                string datasetName = _solomonImporter?.CurrentDataset?.name ?? "Unknown";
+                string solverName = SolverRegistry.Instance?.ActiveSolver?.Name ?? "Unknown";
+                string strategyStr = solverName + " / " + _router.strategy;
+                MissionTracker.Instance.StartMission(datasetName, strategyStr);
+            }
+
+            int count = _dispatcher.DispatchAll(_router.LastSolution);
+
+            // ★ Clear solution after dispatch to prevent re-dispatch
+            // The dispatcher now owns the routes.
+            _router.LastSolution.Clear();
+
+            if (count > 0)
+                SetOutput("[OK] Dispatched " + count + " routes!" + NL + NL +
+                        _dispatcher.GetDispatchStatus());
+            else
+                SetOutput("[FAIL] Failed to dispatch routes. Check console.");
+        }
+        finally
         {
-            string datasetName = _solomonImporter?.CurrentDataset?.name ?? "Unknown";
-            string solverName = SolverRegistry.Instance?.ActiveSolver?.Name ?? "Unknown";
-            string strategyStr = $"{solverName} / {_router.strategy}";
-            MissionTracker.Instance.StartMission(datasetName, strategyStr);
+            _dispatching = false;
         }
-
-        int count = _dispatcher.DispatchAll(_router.LastSolution);
-
-        if (count > 0)
-            SetOutput($"[OK] Dispatched {count} routes!\n\n{_dispatcher.GetDispatchStatus()}");
-        else
-            SetOutput("[FAIL] Failed to dispatch routes. Check console.");
     }
-
 
     private void OnStopAll()
     {
@@ -825,7 +874,44 @@ public class MissionPanelController : MonoBehaviour
         if (cc != null)
         {
             cc.PauseAll(true);
-            SetOutput("[OK] All drones stopped.\\nClick 'Resume All' or use chat to resume.");
+            SetOutput("[OK] All drones stopped." + NL +
+                      "Click 'Resume All' or use chat to resume.");
+        }
+    }
+
+    // ================================================================
+    //  Export Report
+    // ================================================================
+
+    private void OnExportReport()
+    {
+        if (MissionReportExporter.Instance == null)
+        {
+            SetOutput("[FAIL] MissionReportExporter not found." + NL +
+                      "Add it to a GameObject under LLMRoot.");
+            return;
+        }
+
+        if (MissionTracker.Instance == null || MissionTracker.Instance.TotalStopsCompleted == 0)
+        {
+            SetOutput("[INFO] No delivery data yet." + NL +
+                      "Dispatch routes and wait for at least one delivery to complete." + NL + NL +
+                      "You can export at any time - it captures all data up to this moment.");
+            return;
+        }
+
+        string folder = MissionReportExporter.Instance.ExportAll();
+
+        if (!string.IsNullOrEmpty(folder))
+        {
+            string summary = MissionTracker.Instance.GetMissionSummary();
+            SetOutput("[OK] Reports exported!" + NL + NL +
+                      "Folder:" + NL + folder + NL + NL +
+                      "(You can export again later for updated data)" + NL + NL + summary);
+        }
+        else
+        {
+            SetOutput("[FAIL] Export failed. Check console.");
         }
     }
 
@@ -852,34 +938,4 @@ public class MissionPanelController : MonoBehaviour
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(action);
     }
-
-
-    private void OnExportReport()
-    {
-        if (MissionReportExporter.Instance == null)
-        {
-            SetOutput("[FAIL] MissionReportExporter not found.\nAdd it to a GameObject under LLMRoot.");
-            return;
-        }
-
-        if (MissionTracker.Instance == null || MissionTracker.Instance.TotalStopsCompleted == 0)
-        {
-            SetOutput("[INFO] No delivery data yet.\nDispatch routes and wait for at least one delivery to complete.\n\nYou can export at any time — it captures all data up to this moment.");
-            return;
-        }
-
-        string folder = MissionReportExporter.Instance.ExportAll();
-
-        if (!string.IsNullOrEmpty(folder))
-        {
-            string summary = MissionTracker.Instance.GetMissionSummary();
-            SetOutput($"[OK] Reports exported!\n\nFolder:\n{folder}\n\n" +
-                    $"(You can export again later for updated data)\n\n{summary}");
-        }
-        else
-        {
-            SetOutput("[FAIL] Export failed. Check console.");
-        }
-    }
-
 }

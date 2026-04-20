@@ -41,7 +41,7 @@ public class SolomonI1Solver : IRoutingSolver
         // ═══════════════════════════════════
         //  Phase 1: Strict feasibility
         // ═══════════════════════════════════
-        Debug.Log($"[SolomonI1] Phase 1 (strict): {unrouted.Count} customers, " +
+        DLog.Info("Solomon", $" Phase 1 (strict): {unrouted.Count} customers, " +
                   $"{ctx.maxVehicles} vehicles");
 
         while (unrouted.Count > 0 && vehicleNum < ctx.maxVehicles)
@@ -52,7 +52,7 @@ public class SolomonI1Solver : IRoutingSolver
             if (route != null && route.DeliveryStopCount > 0)
             {
                 routes.Add(route);
-                Debug.Log($"[SolomonI1] Phase 1 Route {vehicleNum}: " +
+                DLog.Info("Solomon", $" Phase 1 Route {vehicleNum}: " +
                           $"{route.DeliveryStopCount} customers, " +
                           $"demand={route.totalDemand}");
             }
@@ -65,7 +65,7 @@ public class SolomonI1Solver : IRoutingSolver
         }
 
         int phase1Routed = ctx.orders.Count - unrouted.Count;
-        Debug.Log($"[SolomonI1] Phase 1 complete: {phase1Routed}/{ctx.orders.Count} routed, " +
+        DLog.Info("Solomon", $" Phase 1 complete: {phase1Routed}/{ctx.orders.Count} routed, " +
                   $"{unrouted.Count} remaining");
 
         // ═══════════════════════════════════
@@ -73,11 +73,11 @@ public class SolomonI1Solver : IRoutingSolver
         // ═══════════════════════════════════
         if (unrouted.Count > 0)
         {
-            Debug.Log($"[SolomonI1] Phase 2 (relaxed): routing {unrouted.Count} remaining customers");
+            DLog.Info("Solomon", $" Phase 2 (relaxed): routing {unrouted.Count} remaining customers");
 
             // First try to insert into existing routes
             int insertedIntoExisting = TryInsertIntoExistingRoutes(routes, ctx, unrouted);
-            Debug.Log($"[SolomonI1] Inserted {insertedIntoExisting} into existing routes");
+            DLog.Info("Solomon", $" Inserted {insertedIntoExisting} into existing routes");
 
             // Create new routes for the rest
             while (unrouted.Count > 0 && vehicleNum < ctx.maxVehicles * 2)
@@ -88,7 +88,7 @@ public class SolomonI1Solver : IRoutingSolver
                 if (route != null && route.DeliveryStopCount > 0)
                 {
                     routes.Add(route);
-                    Debug.Log($"[SolomonI1] Phase 2 Route {vehicleNum}: " +
+                    DLog.Info("Solomon", $" Phase 2 Route {vehicleNum}: " +
                               $"{route.DeliveryStopCount} customers, " +
                               $"demand={route.totalDemand}");
                 }
@@ -102,14 +102,14 @@ public class SolomonI1Solver : IRoutingSolver
             if (unrouted.Count > 0)
             {
                 int forced = ForceInsertRemaining(routes, ctx, unrouted);
-                Debug.Log($"[SolomonI1] Force-inserted {forced} remaining customers");
+                DLog.Info("Solomon", $" Force-inserted {forced} remaining customers");
             }
         }
 
         if (unrouted.Count > 0)
-            Debug.LogError($"[SolomonI1] STILL {unrouted.Count} customers unrouted after all phases!");
+            DLog.Error("General",$"[SolomonI1] STILL {unrouted.Count} customers unrouted after all phases!");
         else
-            Debug.Log($"[SolomonI1] All {ctx.orders.Count} customers routed in {routes.Count} routes");
+            DLog.Info("Solomon", $" All {ctx.orders.Count} customers routed in {routes.Count} routes");
 
         return routes;
     }

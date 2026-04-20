@@ -17,7 +17,7 @@ public class CesiumSamplesToggleLayer : MonoBehaviour
         }
         else
         {
-            Debug.LogError("CesiumSamplesToggleLayer requires a Toggle component on the same GameObject.");
+            DLog.Error("General","CesiumSamplesToggleLayer requires a Toggle component on the same GameObject.");
         }
     }
 

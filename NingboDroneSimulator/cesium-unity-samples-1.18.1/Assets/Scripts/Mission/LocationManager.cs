@@ -48,7 +48,7 @@ public class LocationManager : MonoBehaviour
 #endif
 
         _allPoints.AddRange(points);
-        Debug.Log($"[LocationManager] Found {_allPoints.Count} location points " +
+        DLog.Info("Location", $" Found {_allPoints.Count} location points " +
                   $"(Spawn:{GetSpawnPoints().Count} Pickup:{GetPickupPoints().Count} Delivery:{GetDeliveryPoints().Count})");
     }
 
@@ -93,7 +93,7 @@ public class LocationManager : MonoBehaviour
     {
         if (georeference == null)
         {
-            Debug.LogError("[LocationManager] CesiumGeoreference not found");
+            DLog.Error("General","[LocationManager] CesiumGeoreference not found");
             return null;
         }
 
@@ -130,7 +130,7 @@ public class LocationManager : MonoBehaviour
         // Register
         _allPoints.Add(lp);
 
-        Debug.Log($"[LocationManager] Created {type} '{pointName}' at ({llh.x:F4}, {llh.y:F4}, {llh.z:F0}m)");
+        DLog.Info("Location", $" Created {type} '{pointName}' at ({llh.x:F4}, {llh.y:F4}, {llh.z:F0}m)");
 
         OnPointAdded?.Invoke(lp);
         OnPointsChanged?.Invoke();
@@ -196,7 +196,7 @@ public class LocationManager : MonoBehaviour
         bool removed = _allPoints.Remove(point);
         if (removed)
         {
-            Debug.Log($"[LocationManager] Removed point: {point.GetDisplayName()}");
+            DLog.Info("Location", $" Removed point: {point.GetDisplayName()}");
             OnPointsChanged?.Invoke();
         }
         return removed;
@@ -222,7 +222,7 @@ public class LocationManager : MonoBehaviour
 
         if (count > 0)
         {
-            Debug.Log($"[LocationManager] Removed {count} points");
+            DLog.Info("Location", $" Removed {count} points");
             OnPointsChanged?.Invoke();
         }
 

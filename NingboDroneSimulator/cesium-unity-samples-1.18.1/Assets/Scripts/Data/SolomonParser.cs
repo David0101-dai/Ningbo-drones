@@ -5,37 +5,29 @@ using System.IO;
 using System.Linq;
 using UnityEngine;
 
-/// <summary>
-/// Parses Solomon VRPTW benchmark files (both raw text and our JSON format).
-/// </summary>
 public static class SolomonParser
 {
-    // ================================================================
-    //  Parse Raw Solomon Text Format
-    // ================================================================
+    // Use numeric char codes to avoid escape sequence corruption during copy-paste
+    private static readonly char LF  = (char)10;  // line feed
+    private static readonly char CR  = (char)13;  // carriage return
+    private static readonly char TAB = (char)9;    // tab
+    private static readonly string NEWLINE = ((char)10).ToString();
 
-    /// <summary>
-    /// Parse raw Solomon benchmark text format.
-    /// Handles the standard format with VEHICLE and CUSTOMER sections.
-    /// </summary>
     public static SolomonDataset ParseRawText(string text, string datasetName = "")
     {
         var dataset = new SolomonDataset { name = datasetName };
-        var lines = text.Split(new char[] { '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries)
+        var lines = text.Split(new char[] { LF, CR }, System.StringSplitOptions.RemoveEmptyEntries)
             .Select(l => l.Trim())
             .Where(l => !string.IsNullOrEmpty(l))
             .ToList();
 
         int i = 0;
 
-        // Skip header lines until we find VEHICLE section
         while (i < lines.Count && !lines[i].StartsWith("VEHICLE"))
             i++;
 
-        // Parse vehicle info
-        // Skip "VEHICLE" header and "NUMBER CAPACITY" header
-        i++; // skip "VEHICLE"
-        if (i < lines.Count && lines[i].Contains("NUMBER")) i++; // skip column header
+        i++;
+        if (i < lines.Count && lines[i].Contains("NUMBER")) i++;
 
         if (i < lines.Count)
         {
@@ -48,15 +40,12 @@ public static class SolomonParser
             i++;
         }
 
-        // Skip until CUSTOMER section
         while (i < lines.Count && !lines[i].StartsWith("CUSTOMER"))
             i++;
 
-        // Skip "CUSTOMER" header and column header
-        i++; // skip "CUSTOMER"
-        if (i < lines.Count && lines[i].Contains("CUST")) i++; // skip column header
+        i++;
+        if (i < lines.Count && lines[i].Contains("CUST")) i++;
 
-        // Parse customers
         while (i < lines.Count)
         {
             var parts = SplitNumbers(lines[i]);
@@ -81,23 +70,16 @@ public static class SolomonParser
             i++;
         }
 
-        Debug.Log($"[SolomonParser] Parsed raw text: {dataset}");
+        Debug.Log("[SolomonParser] Parsed raw text: " + dataset);
         return dataset;
     }
 
-    // ================================================================
-    //  Parse Our JSON Format
-    // ================================================================
-
-    /// <summary>
-    /// Parse our JSON wrapper format for Solomon data.
-    /// </summary>
     public static SolomonDataset ParseJson(string json)
     {
         var wrapper = JsonUtility.FromJson<SolomonJsonWrapper>(json);
         if (wrapper == null)
         {
-            Debug.LogError("[SolomonParser] Failed to parse JSON");
+            DLog.Error("General","[SolomonParser] Failed to parse JSON");
             return null;
         }
 
@@ -138,23 +120,15 @@ public static class SolomonParser
                 dataset.customers.Add(customer);
         }
 
-        Debug.Log($"[SolomonParser] Parsed JSON: {dataset}");
+        Debug.Log("[SolomonParser] Parsed JSON: " + dataset);
         return dataset;
     }
 
-    // ================================================================
-    //  Auto-detect Format and Parse
-    // ================================================================
-
-    /// <summary>
-    /// Auto-detect whether the file is raw Solomon text or our JSON format,
-    /// then parse accordingly.
-    /// </summary>
     public static SolomonDataset ParseFile(string filePath)
     {
         if (!File.Exists(filePath))
         {
-            Debug.LogError($"[SolomonParser] File not found: {filePath}");
+            DLog.Error("General","[SolomonParser] File not found: " + filePath);
             return null;
         }
 
@@ -162,7 +136,6 @@ public static class SolomonParser
         string fileName = Path.GetFileNameWithoutExtension(filePath);
         string ext = Path.GetExtension(filePath).ToLowerInvariant();
 
-        // Try JSON first
         if (ext == ".json")
         {
             var dataset = ParseJson(text);
@@ -170,33 +143,31 @@ public static class SolomonParser
                 return dataset;
         }
 
-        // Try raw text format
         if (text.Contains("VEHICLE") || text.Contains("CUSTOMER") || text.Contains("CUST NO"))
         {
             return ParseRawText(text, fileName);
         }
 
-        // Try as plain numbers (just the data rows)
-        var lines = text.Split(new char[] { '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries)
+        var lines = text.Split(new char[] { LF, CR }, System.StringSplitOptions.RemoveEmptyEntries)
             .Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
         if (lines.Count > 0 && SplitNumbers(lines[0]).Count >= 7)
         {
-            // Wrap with minimal headers
-            string wrapped = "VEHICLE\\nNUMBER CAPACITY\\n50 200\\n\\nCUSTOMER\\nCUST NO. XCOORD. YCOORD. DEMAND READY TIME DUE DATE SERVICE TIME\\n" + text;
+            // Build wrapped text using string concat with NEWLINE constant
+            string wrapped =
+                "VEHICLE" + NEWLINE +
+                "NUMBER CAPACITY" + NEWLINE +
+                "50 200" + NEWLINE +
+                NEWLINE +
+                "CUSTOMER" + NEWLINE +
+                "CUST NO. XCOORD. YCOORD. DEMAND READY TIME DUE DATE SERVICE TIME" + NEWLINE +
+                text;
             return ParseRawText(wrapped, fileName);
         }
 
-        Debug.LogError($"[SolomonParser] Could not determine format of: {filePath}");
+        DLog.Error("General","[SolomonParser] Could not determine format of: " + filePath);
         return null;
     }
 
-    // ================================================================
-    //  Export to Our JSON Format
-    // ================================================================
-
-    /// <summary>
-    /// Export a parsed dataset to our JSON format (for saving/sharing)
-    /// </summary>
     public static string ExportToJson(SolomonDataset dataset)
     {
         var wrapper = new SolomonJsonWrapper
@@ -218,25 +189,20 @@ public static class SolomonParser
             };
         }
 
-        // Add depot
         if (dataset.depot != null)
             wrapper.customers.Add(CustomerToJson(dataset.depot));
 
-        // Add customers
         foreach (var c in dataset.customers)
             wrapper.customers.Add(CustomerToJson(c));
 
         return JsonUtility.ToJson(wrapper, true);
     }
 
-    // ================================================================
-    //  Internal Helpers
-    // ================================================================
-
     private static List<float> SplitNumbers(string line)
     {
         var result = new List<float>();
-        var parts = line.Split(new char[] { ' ', '\t' }, System.StringSplitOptions.RemoveEmptyEntries);
+        var parts = line.Split(new char[] { ' ', TAB },
+            System.StringSplitOptions.RemoveEmptyEntries);
         foreach (var p in parts)
         {
             if (float.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out float val))
@@ -258,10 +224,6 @@ public static class SolomonParser
             serviceTime = c.serviceTime
         };
     }
-
-    // ================================================================
-    //  JSON Wrapper Classes (for JsonUtility)
-    // ================================================================
 
     [System.Serializable]
     private class SolomonJsonWrapper

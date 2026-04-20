@@ -10,36 +10,30 @@ public class Logger : MonoBehaviour
     public static Logger Instance;
 
     [Header("Recording Settings")]
-    [Tooltip("Sample interval in seconds. 0.5 = 2 frames per second per drone")]
     public float recordInterval = 0.5f;
 
     [Header("Debug")]
     public bool logOnSave = true;
 
-    // ====== Internal State ======
     private FlightLogData _currentLog;
     private float _sessionStartTime;
     private bool _isRecording = false;
     private bool _saved = false;
     private bool _sessionInitialized = false;
-
-    // Per-drone last record time
     private readonly Dictionary<string, float> _lastRecordTime = new();
 
-    // ====== Public Properties ======
     public bool IsRecording => _isRecording;
     public int FrameCount => _currentLog?.frames?.Count ?? 0;
 
-    // ====== Path Helper ======
     private static string GetLogDirectory()
     {
-        #if UNITY_EDITOR
-            string projectRoot = Path.GetDirectoryName(Application.dataPath);
-            return Path.Combine(projectRoot, "Logs", "FlightLogs");
-        #else
-            string exeDir = Path.GetDirectoryName(Application.dataPath);
-            return Path.Combine(exeDir, "Logs", "FlightLogs");
-        #endif
+#if UNITY_EDITOR
+        string projectRoot = Path.GetDirectoryName(Application.dataPath);
+        return Path.Combine(projectRoot, "Logs", "FlightLogs");
+#else
+        string exeDir = Path.GetDirectoryName(Application.dataPath);
+        return Path.Combine(exeDir, "Logs", "FlightLogs");
+#endif
     }
 
     void Awake()
@@ -54,16 +48,11 @@ public class Logger : MonoBehaviour
             StartNewSession();
     }
 
-    /// <summary>
-    /// Start a new recording session.
-    /// ★ FIX: Only blocks if actively recording AND not yet saved.
-    /// After SaveLog() or StopRecording(), a new session CAN be started.
-    /// </summary>
     public void StartNewSession()
     {
         if (_sessionInitialized && _isRecording && !_saved)
         {
-            Debug.LogWarning("[Logger] Session already recording, ignoring StartNewSession");
+            DLog.Warn("Logger", "Session already recording, ignoring StartNewSession");
             return;
         }
 
@@ -79,49 +68,35 @@ public class Logger : MonoBehaviour
         _sessionInitialized = true;
         _lastRecordTime.Clear();
 
-        Debug.Log($"[Logger] New session started: {_currentLog.sessionId}, startTime={_sessionStartTime:F2}");
+        DLog.Info("Logger", "New session started: " + _currentLog.sessionId +
+                  ", startTime=" + _sessionStartTime.ToString("F2"));
     }
 
-    /// <summary>
-    /// Stop recording (does not save - call SaveLog to write file)
-    /// </summary>
     public void StopRecording()
     {
         _isRecording = false;
-        Debug.Log($"[Logger] Recording stopped, {FrameCount} frames recorded");
+        DLog.Info("Logger", "Recording stopped, " + FrameCount + " frames recorded");
     }
 
-    /// <summary>
-    /// ★ NEW: Called at the start of each new mission dispatch.
-    /// Auto-saves the current session (if any recorded data exists) and starts fresh.
-    /// This ensures each mission dispatch gets its own log file.
-    /// Returns the path of the saved file, or null if nothing was saved.
-    /// </summary>
     public string PrepareForNewMission()
     {
         string savedPath = null;
 
-        // Save current session if it has unsaved data
         if (_currentLog != null && _currentLog.frames.Count > 0 && !_saved)
         {
             savedPath = SaveLog();
-            Debug.Log($"[Logger] Auto-saved previous session before new mission: {savedPath}");
+            DLog.Info("Logger", "Auto-saved previous session before new mission: " + savedPath);
         }
 
-        // Reset state flags to allow a fresh session
         _sessionInitialized = false;
         _saved = false;
         _isRecording = false;
 
-        // Start the new session immediately
         StartNewSession();
 
         return savedPath;
     }
 
-    /// <summary>
-    /// Record a frame (with sample interval control)
-    /// </summary>
     public void RecordFrame(string droneName, double3 llh, float speed,
                             string stopReason, string command = "", bool isColliding = false)
     {
@@ -152,29 +127,24 @@ public class Logger : MonoBehaviour
         _currentLog.frames.Add(frame);
     }
 
-    /// <summary>
-    /// Save log to file. Returns file path on success, null on failure.
-    /// ★ FIX: After saving, does NOT auto-start a new session.
-    /// Call StartNewSession() or PrepareForNewMission() explicitly.
-    /// </summary>
     public string SaveLog()
     {
         if (_saved)
         {
-            Debug.Log("[Logger] Already saved this session");
+            DLog.Verbose("Logger", "Already saved this session");
             return null;
         }
 
         if (_currentLog == null || _currentLog.frames.Count == 0)
         {
-            Debug.LogWarning("[Logger] No data recorded");
+            DLog.Warn("Logger", "No data recorded");
             return null;
         }
 
         _currentLog.frames.Sort((a, b) => a.time.CompareTo(b.time));
 
         string json = JsonUtility.ToJson(_currentLog, true);
-        string fileName = $"FlightLog_{_currentLog.sessionId}.json";
+        string fileName = "FlightLog_" + _currentLog.sessionId + ".json";
 
         string dir = GetLogDirectory();
         Directory.CreateDirectory(dir);
@@ -192,25 +162,19 @@ public class Logger : MonoBehaviour
             foreach (var f in _currentLog.frames)
                 droneNames.Add(f.droneName);
 
-            Debug.Log($"[Logger] Saved: {path}\\n" +
-                      $"  Frames: {_currentLog.frames.Count}\\n" +
-                      $"  Time range: {minTime:F2}s - {maxTime:F2}s\\n" +
-                      $"  Drones: {string.Join(", ", droneNames)}");
+            DLog.Info("Logger", "Saved: " + path +
+                      " | Frames: " + _currentLog.frames.Count +
+                      " | Time: " + minTime.ToString("F2") + "s - " + maxTime.ToString("F2") + "s" +
+                      " | Drones: " + string.Join(", ", droneNames));
         }
 
         return path;
     }
 
-    /// <summary>
-    /// ★ NEW: Save current log AND immediately start a new recording session.
-    /// Convenient for UI "Save Log" button — keeps recording alive.
-    /// Returns saved file path, or null if nothing to save.
-    /// </summary>
     public string SaveLogAndContinue()
     {
         string path = SaveLog();
 
-        // Immediately start a new session so recording continues
         _sessionInitialized = false;
         _saved = false;
         _isRecording = false;
@@ -219,9 +183,6 @@ public class Logger : MonoBehaviour
         return path;
     }
 
-    /// <summary>
-    /// Get list of all saved log files (fileName, fullPath)
-    /// </summary>
     public static List<(string fileName, string fullPath)> GetSavedLogFiles()
     {
         var result = new List<(string, string)>();

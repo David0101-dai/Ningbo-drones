@@ -161,7 +161,7 @@ public class ReplayManager : MonoBehaviour
             if (zeros > 0) sb.Append($" [WARNING: {zeros} zero-LLH frames]");
             sb.AppendLine();
         }
-        Debug.Log(sb.ToString());
+        DLog.Info("Replay", sb.ToString());
 
         // 替换 LoadCoroutine 末尾的 EmitStatus 调用
         EmitStatus($"Loaded: {LoadedFileName} | {_loadedLog.frames.Count} frames | " +
@@ -225,13 +225,13 @@ public class ReplayManager : MonoBehaviour
             if (_droneCache.ContainsKey(logName))
             {
                 bool isGhost = _ghostNavSet.Contains(_droneCache[logName]);
-                Debug.Log($"[Replay] ✓ '{logName}' ready " +
+                DLog.Info("Replay", $" ✓ '{logName}' ready " +
                           $"({(isGhost ? "ghost" : "real drone")})");
                 matched++;
             }
             else
             {
-                Debug.LogWarning($"[Replay] ✗ '{logName}' NOT found");
+                DLog.Warn("General",$"[Replay] ✗ '{logName}' NOT found");
                 unmatched++;
             }
         }
@@ -292,7 +292,7 @@ public class ReplayManager : MonoBehaviour
         IsPaused = false;
         _diagFrameCount = 0;
 
-        Debug.Log($"[Replay] Starting: timeScale={Time.timeScale}, " +
+        DLog.Info("Replay", $" Starting: timeScale={Time.timeScale}, " +
                   $"replaySpeed={replaySpeed}x, duration={TotalDuration:F1}s, " +
                   $"startOffset={startOffset:F1}s, " +
                   $"matched={matched}, unmatched={unmatched}, ghosts={ghostsCreated}");
@@ -375,7 +375,7 @@ public class ReplayManager : MonoBehaviour
         ApplyFramesAtCurrentTime();
 
         if (logReplayProgress && Time.frameCount % 60 == 0)
-            Debug.Log($"[Replay] {Progress * 100f:F0}% | " +
+            DLog.Info("Replay", $" {Progress * 100f:F0}% | " +
                       $"{CurrentTime:F1}s / {TotalDuration:F1}s");
     }
 
@@ -397,10 +397,10 @@ public class ReplayManager : MonoBehaviour
             if (_diagFrameCount < DiagLogFrames)
             {
                 bool isGhost = _ghostNavSet.Contains(nav);
-                Debug.Log($"[Replay DIAG] {droneName}" +
-                          $"{(isGhost ? " (ghost)" : "")}: " +
-                          $"t={CurrentTime:F2}s, " +
-                          $"pos=({pos.x:F5}, {pos.y:F5}, {pos.z:F1})");
+                // Debug.Log($"[Replay DIAG] {droneName}" +
+                   //       $"{(isGhost ? " (ghost)" : "")}: " +
+                     //     $"t={CurrentTime:F2}s, " +
+                       //   $"pos=({pos.x:F5}, {pos.y:F5}, {pos.z:F1})");
             }
         }
         _diagFrameCount++;
@@ -455,7 +455,7 @@ public class ReplayManager : MonoBehaviour
 
         if (factory == null || factory.dronePrefab == null || geoRef == null)
         {
-            Debug.LogWarning($"[Replay] Cannot create ghost '{droneName}': " +
+            DLog.Warn("General",$"[Replay] Cannot create ghost '{droneName}': " +
                              "missing DroneFactory/prefab/georeference");
             return false;
         }
@@ -478,7 +478,7 @@ public class ReplayManager : MonoBehaviour
         var nav = ghost.GetComponent<DroneGeoNavigator>();
         if (nav == null)
         {
-            Debug.LogWarning($"[Replay] Ghost '{droneName}': no DroneGeoNavigator found");
+            DLog.Warn("General",$"[Replay] Ghost '{droneName}': no DroneGeoNavigator found");
             Destroy(ghost);
             return false;
         }
@@ -509,7 +509,7 @@ public class ReplayManager : MonoBehaviour
             vizPath.Add(frame.llh);
         nav.InjectPath(vizPath, startNow: false);
 
-        Debug.Log($"[Replay] Ghost '{droneName}' path injected: " +
+        DLog.Info("Replay", $" Ghost '{droneName}' path injected: " +
                 $"{nav.GetPath().Count} points (from {frames.Count} log frames)");
 
         // ── Configure DroneInfo ──
@@ -554,7 +554,7 @@ public class ReplayManager : MonoBehaviour
         _ghostNavSet.Add(nav);
         _ghostDrones.Add(ghost);
 
-        Debug.Log($"[Replay] ✓ Ghost '{droneName}': {frames.Count} frames, " +
+        DLog.Info("Replay", $" ✓ Ghost '{droneName}': {frames.Count} frames, " +
                   $"t=[{frames[0].time:F1}s~{frames[frames.Count - 1].time:F1}s], " +
                   $"start=({frames[0].llh.x:F4}, {frames[0].llh.y:F4}, " +
                   $"{frames[0].llh.z:F1})");
@@ -604,7 +604,7 @@ public class ReplayManager : MonoBehaviour
         _ghostNavSet.Clear();
 
         if (count > 0)
-            Debug.Log($"[Replay] Destroyed {count} ghost drones");
+            DLog.Info("Replay", $" Destroyed {count} ghost drones");
     }
 
     // ================================================================
@@ -638,7 +638,7 @@ public class ReplayManager : MonoBehaviour
                 _droneCache[goName] = nav;
         }
 
-        Debug.Log($"[Replay] Cached {_droneCache.Count} real drone entries: " +
+        DLog.Info("Replay", $" Cached {_droneCache.Count} real drone entries: " +
                   $"[{string.Join(", ", _droneCache.Keys)}]");
     }
 
@@ -696,7 +696,7 @@ public class ReplayManager : MonoBehaviour
     private void EmitStatus(string msg)
     {
         // Console: multi-line messages show nicely when expanded
-        Debug.Log($"[Replay] {msg}");
+        DLog.Info("Replay", $" {msg}");
 
         // ★ FIX: UI receives clean single-line version (no literal \\n in panel)
         string uiMsg = msg.Replace("\\n", " | ").Replace("  ", " ").Trim();

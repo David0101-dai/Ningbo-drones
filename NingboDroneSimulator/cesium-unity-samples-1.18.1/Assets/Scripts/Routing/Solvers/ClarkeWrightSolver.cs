@@ -43,7 +43,7 @@ public class ClarkeWrightSolver : IRoutingSolver
         int n = ctx.orders.Count;
         if (n == 0) return new List<PlannedRoute>();
 
-        Debug.Log($"[Clarke-Wright] Starting: {n} customers, " +
+        DLog.Info("CW", $" Starting: {n} customers, " +
                   $"{ctx.maxVehicles} vehicles, cap={ctx.vehicleCapacity}, " +
                   $"speed={ctx.speedMps:F1} m/s");
 
@@ -142,7 +142,7 @@ public class ClarkeWrightSolver : IRoutingSolver
                            .OrderByDescending(r => r.totalDemand)
                            .ToList();
 
-        Debug.Log($"[Clarke-Wright] After merging: {active.Count} routes " +
+        DLog.Info("CW", $" After merging: {active.Count} routes " +
                   $"(limit={ctx.maxVehicles})");
 
         if (active.Count > ctx.maxVehicles)
@@ -224,7 +224,7 @@ public class ClarkeWrightSolver : IRoutingSolver
         int onTime = result.Sum(r => r.stops.Count(s =>
             s.type == RouteStop.StopType.Delivery && !s.wasLate));
 
-        Debug.Log($"[Clarke-Wright] COMPLETE:" +
+        DLog.Info("CW", $" COMPLETE:" +
                   $"\\n  Routes: {result.Count}/{ctx.maxVehicles}" +
                   $"\\n  Customers: {routed}/{n} ({(unrouted > 0 ? "MISSING!" : "100%")})" +
                   $"\\n  On-time: {onTime}/{routed} " +
@@ -234,7 +234,7 @@ public class ClarkeWrightSolver : IRoutingSolver
                   $"\\n  Makespan: {makespan:F1}");
 
         if (unrouted > 0)
-            Debug.LogError($"[Clarke-Wright] {unrouted} customers STILL unrouted — this should never happen!");
+            DLog.Error("General",$"[Clarke-Wright] {unrouted} customers STILL unrouted — this should never happen!");
 
         return result;
     }
@@ -256,7 +256,7 @@ public class ClarkeWrightSolver : IRoutingSolver
                 allCustomersSet.Add(c);
         int totalBefore = allCustomersSet.Count;
 
-        Debug.Log($"[Clarke-Wright] AbsorbExcess: {active.Count} routes, " +
+        DLog.Info("CW", $" AbsorbExcess: {active.Count} routes, " +
                 $"{totalBefore} unique customers, limit={ctx.maxVehicles}");
 
         if (active.Count <= ctx.maxVehicles)
@@ -281,7 +281,7 @@ public class ClarkeWrightSolver : IRoutingSolver
         // Remove any duplicates within toAbsorb itself
         toAbsorb = toAbsorb.Distinct().ToList();
 
-        Debug.Log($"[Clarke-Wright] Customers in keep: {inKeep.Count}, " +
+        DLog.Info("CW", $" Customers in keep: {inKeep.Count}, " +
                 $"to absorb: {toAbsorb.Count}, " +
                 $"expected total: {inKeep.Count + toAbsorb.Count}");
 
@@ -297,7 +297,7 @@ public class ClarkeWrightSolver : IRoutingSolver
                 if (!accounted.Contains(c))
                 {
                     toAbsorb.Add(c);
-                    Debug.LogWarning($"[Clarke-Wright] Rescued lost customer " +
+                    DLog.Warn("General",$"[Clarke-Wright] Rescued lost customer " +
                                     $"C{ctx.orders[c].customerNumber:D3}");
                 }
             }
@@ -409,7 +409,7 @@ public class ClarkeWrightSolver : IRoutingSolver
                 customers = new List<int> { custIdx },
                 totalDemand = ctx.orders[custIdx].demand
             });
-            Debug.LogWarning($"[Clarke-Wright] Overflow: C{ctx.orders[custIdx].customerNumber:D3}");
+            DLog.Warn("General",$"[Clarke-Wright] Overflow: C{ctx.orders[custIdx].customerNumber:D3}");
         }
 
         // ── Final verification ──
@@ -429,7 +429,7 @@ public class ClarkeWrightSolver : IRoutingSolver
                         customers = new List<int> { c },
                         totalDemand = ctx.orders[c].demand
                     });
-                    Debug.LogError($"[Clarke-Wright] EMERGENCY rescue: " +
+                    DLog.Error("General",$"[Clarke-Wright] EMERGENCY rescue: " +
                                 $"C{ctx.orders[c].customerNumber:D3}");
                 }
             }
@@ -438,7 +438,7 @@ public class ClarkeWrightSolver : IRoutingSolver
         int finalCount = 0;
         foreach (var r in keep) finalCount += r.customers.Count;
 
-        Debug.Log($"[Clarke-Wright] Absorption done: {absorbed} absorbed, " +
+        DLog.Info("CW", $" Absorption done: {absorbed} absorbed, " +
                 $"{phase3.Count} overflow, {keep.Count} routes, " +
                 $"{finalCount} total customers (expected {totalBefore})");
 
@@ -479,7 +479,7 @@ public class ClarkeWrightSolver : IRoutingSolver
                 missing.Add(i);
         }
 
-        Debug.LogWarning($"[Clarke-Wright] VerifyAndFix: {missing.Count} " +
+        DLog.Warn("General",$"[Clarke-Wright] VerifyAndFix: {missing.Count} " +
                          $"customers missing after conversion — force inserting");
 
         foreach (int custIdx in missing)
@@ -573,7 +573,7 @@ public class ClarkeWrightSolver : IRoutingSolver
 
                 routes.Add(solo);
 
-                Debug.LogWarning($"[Clarke-Wright] Emergency solo route for " +
+                DLog.Warn("General",$"[Clarke-Wright] Emergency solo route for " +
                                  $"C{order.customerNumber:D3}");
             }
         }

@@ -196,7 +196,7 @@ public class DroneGeoNavigator : MonoBehaviour
         if (llhPath == null || llhPath.Count < 2)
         {
             if (showProgressLogs)
-                Debug.LogWarning($"{_logPrefix} InjectPath failed: need at least 2 points");
+                DLog.Warn("General",$"{_logPrefix} InjectPath failed: need at least 2 points");
             return false;
         }
 
@@ -246,7 +246,7 @@ public class DroneGeoNavigator : MonoBehaviour
     {
         if (!georeference)
         {
-            Debug.LogError($"{_logPrefix} 缺少CesiumGeoreference！");
+            DLog.Error("General",$"{_logPrefix} 缺少CesiumGeoreference！");
             enabled = false; return;
         }
 
@@ -364,7 +364,7 @@ public class DroneGeoNavigator : MonoBehaviour
                     //_emergencyStopped = true;
                     //_externalEmergencyStop = true;
                     if (showProgressLogs)
-                        Debug.LogWarning($"{_logPrefix}:障碍物内部穿行！！！！");
+                        DLog.Warn("General",$"{_logPrefix}:障碍物内部穿行！！！！");
                 }
                 // ✅ 已经停止的情况下，不重复设置
             }
@@ -730,7 +730,7 @@ public class DroneGeoNavigator : MonoBehaviour
         foreach (var nav in navs)
             nav.showPathGizmos = _globalPathVisible;
 
-        Debug.Log($"[Navigator] Path lines: {(_globalPathVisible ? "ON" : "OFF")}");
+        DLog.Info("Nav", $" Path lines: {(_globalPathVisible ? "ON" : "OFF")}");
     }
 
 

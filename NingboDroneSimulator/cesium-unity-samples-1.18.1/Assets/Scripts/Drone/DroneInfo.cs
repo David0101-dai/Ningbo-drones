@@ -82,7 +82,7 @@ public class DroneInfo : MonoBehaviour
             }
             else
             {
-                Debug.LogError($"[{gameObject.name}] DroneInfoPanel script not found on prefab");
+                DLog.Error("General",$"[{gameObject.name}] DroneInfoPanel script not found on prefab");
             }
         }
 
@@ -111,7 +111,7 @@ public class DroneInfo : MonoBehaviour
             {
                 _lowBatteryFired = true;
                 OnLowBattery?.Invoke(this);
-                Debug.LogWarning($"[{GetName()}] Low battery: {spec.BatteryPercent:F0}%");
+                DLog.Warn("General",$"[{GetName()}] Low battery: {spec.BatteryPercent:F0}%");
             }
         }
 
@@ -218,7 +218,7 @@ public class DroneInfo : MonoBehaviour
         if (navigator.GetProgress() >= 99.9f)
         {
             _routeCompletedFired = true;
-            Debug.Log($"[{GetName()}] Route completed: {currentRouteName}");
+            DLog.Info("DroneInfo", $"{GetName()} Route completed: {currentRouteName}");
             OnRouteCompleted?.Invoke(this);
         }
     }

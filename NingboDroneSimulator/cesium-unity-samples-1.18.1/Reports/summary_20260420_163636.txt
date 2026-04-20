@@ -1,0 +1,29 @@
+﻿=== Mission Summary ===
+Dataset: R2_2_4
+Strategy: Clarke-Wright Savings / Balanced
+
+Deliveries: 200
+On time: 190 (95.0%)
+Late: 10
+Avg lateness: 35.4 sim_time_units
+Max lateness: 182.6 sim_time_units
+
+=== Leg Statistics ===
+Total legs: 210
+Total straight-line distance: 152973m (153.0km)
+Total actual flown distance: 150751m (150.8km)
+Detour ratio: 0.99x (1.0 = no detour)
+Avg speed: 11.8 m/s
+
+=== Route Statistics ===
+Routes completed: 10/10
+Total distance (actual): 150751m (150.8km)
+Makespan: 2201 sim_time_units
+Avg battery used per route: 23.1%
+
+=== Units Reference ===
+Distance: meters (m)
+Time: sim_time_units (Solomon abstract units)
+Speed: meters/second (m/s)
+Coordinates: WGS84 degrees (longitude, latitude)
+Altitude: meters above WGS84 ellipsoid

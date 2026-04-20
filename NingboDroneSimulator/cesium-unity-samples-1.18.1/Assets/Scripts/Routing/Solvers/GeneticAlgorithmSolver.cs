@@ -74,7 +74,7 @@ public class GeneticAlgorithmSolver : IRoutingSolver
         // ─── 你的算法逻辑写在这里 ───
         // TODO: 实现遗传算法
 
-        Debug.Log($"[{Name}] Solved: {routes.Count} routes");
+        DLog.Info("GA", $"Solved: {routes.Count} routes");
         return routes;
     }
 }

@@ -78,9 +78,7 @@ public class DroneCommandCenter : MonoBehaviour
 
         // Count unique physical drones
         var uniqueDrones = new HashSet<DroneInfo>(_infoByName.Values);
-        Debug.Log($"[CommandCenter] Registry refreshed: {uniqueDrones.Count} drones ({_infoByName.Count} name entries)");
-
-
+        DLog.Info("CommandCenter", $"Registry refreshed: {uniqueDrones.Count} drones ({_infoByName.Count} name entries)");
     }
 
     // ================================================================
@@ -200,7 +198,7 @@ public class DroneCommandCenter : MonoBehaviour
     {
         if (!TryGetNav(droneName, out var nav)) return false;
         nav.SetCruiseSpeed(speed);
-        Debug.Log($"[CommandCenter] {droneName} speed set to {speed:F1}m/s");
+        DLog.Info("CommandCenter", $"[{droneName}] Speed set to {speed:F1}m/s");
         return true;
     }
 
@@ -211,7 +209,7 @@ public class DroneCommandCenter : MonoBehaviour
     {
         if (!TryGetNav(droneName, out var nav)) return false;
         nav.PauseFlight(pause);
-        Debug.Log($"[CommandCenter] {droneName} {(pause ? "paused" : "resumed")}");
+        DLog.Info("CommandCenter", $"{droneName} {(pause ? "paused" : "resumed")}");
         return true;
     }
 
@@ -226,7 +224,7 @@ public class DroneCommandCenter : MonoBehaviour
         Transform route = waypointsRoot.Find(routeName);
         if (!route)
         {
-            Debug.LogWarning($"[CommandCenter] Route '{routeName}' not found under {waypointsRoot.name}");
+            DLog.Warn("General",$"[CommandCenter] Route '{routeName}' not found under {waypointsRoot.name}");
             return false;
         }
 
@@ -238,7 +236,7 @@ public class DroneCommandCenter : MonoBehaviour
             info.AssignRoute(routeName);
         }
 
-        Debug.Log($"[CommandCenter] {droneName} route -> {routeName} (ok={ok})");
+        DLog.Info("CommandCenter", $"[{droneName}] Route -> {routeName} (ok={ok})");
         return ok;
     }
 
@@ -268,7 +266,7 @@ public class DroneCommandCenter : MonoBehaviour
                 kvp.Value.SetStop(DroneGeoNavigator.StopReason.External, pause);
         }
 
-        Debug.Log($"[CommandCenter] PauseAll={pause} ({_navByName.Count} drones)");
+        DLog.Info("CommandCenter", $"PauseAll={pause} ({_navByName.Count} drones)");
     }
 
     /// <summary>
@@ -312,7 +310,7 @@ public class DroneCommandCenter : MonoBehaviour
                 kvp.Value.SetCruiseSpeed(speed);
         }
 
-        Debug.Log($"[CommandCenter] SetSpeedAll={speed:F1}m/s");
+        DLog.Info("CommandCenter", $"SetSpeedAll={speed:F1}m/s");
     }
 
     /// <summary>

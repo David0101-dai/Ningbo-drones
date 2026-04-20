@@ -141,7 +141,7 @@ MonoBehaviour:
   showProgressLogs: 0
   showPathGizmos: 1
   showMovementLogs: 0
-  pathGizmoColor: {r: 0.9478849, g: 1, b: 0, a: 1}
+  pathGizmoColor: {r: 1, g: 0.1436849, b: 0, a: 0.30980393}
   pathLineWidth: 1.7
   pathLineDistanceScale: 0.73
 --- !u!114 &1331128659972587919
@@ -163,10 +163,14 @@ MonoBehaviour:
     m_Bits: 8
   forwardRayCount: 5
   forwardRaySpread: 20
+  speedDetectionFactor: 1.5
   gridHalfSizeMeters: 60
   cellSizeMeters: 4
   cellCheckRadius: 1.5
+  maxHeightEscalations: 3
+  heightEscalationStep: 8
   minDistanceAfterAvoid: 50
+  minTimeAfterAvoid: 2
   logInfo: 0
   drawDebug: 0
   debugDrawGridSlice: 1

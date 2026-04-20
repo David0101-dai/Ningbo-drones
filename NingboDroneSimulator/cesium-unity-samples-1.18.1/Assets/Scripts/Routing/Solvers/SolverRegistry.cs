@@ -59,21 +59,21 @@ public class SolverRegistry : MonoBehaviour
             {
                 var instance = (IRoutingSolver)Activator.CreateInstance(type);
                 _solvers.Add(instance);
-                Debug.Log($"[SolverRegistry] Discovered: {instance.Name} ({type.Name})");
+                DLog.Info("Registry", $" Discovered: {instance.Name} ({type.Name})");
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[SolverRegistry] Failed to instantiate {type.Name}: {e.Message}");
+                DLog.Warn("General",$"[SolverRegistry] Failed to instantiate {type.Name}: {e.Message}");
             }
         }
 
         if (_solvers.Count == 0)
         {
-            Debug.LogError("[SolverRegistry] No IRoutingSolver implementations found!");
+            DLog.Error("General","[SolverRegistry] No IRoutingSolver implementations found!");
         }
         else
         {
-            Debug.Log($"[SolverRegistry] {_solvers.Count} solvers ready. Default: {_solvers[0].Name}");
+            DLog.Info("Registry", $" {_solvers.Count} solvers ready. Default: {_solvers[0].Name}");
         }
     }
 
@@ -97,7 +97,7 @@ public class SolverRegistry : MonoBehaviour
         if (index >= 0 && index < _solvers.Count)
         {
             _activeIndex = index;
-            Debug.Log($"[SolverRegistry] Active solver: {_solvers[_activeIndex].Name}");
+            DLog.Info("Registry", $" Active solver: {_solvers[_activeIndex].Name}");
         }
     }
 

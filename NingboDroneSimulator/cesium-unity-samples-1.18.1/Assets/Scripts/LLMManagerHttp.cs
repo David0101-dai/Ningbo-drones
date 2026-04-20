@@ -1,9 +1,10 @@
+// Assets/Scripts/LLMManagerHttp.cs
 using System;
 using System.Collections;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
-using Unity.Mathematics;   // ← 新增这行，用于 double3
+using Unity.Mathematics;
 
 public class LLMManagerHttp : MonoBehaviour
 {
@@ -15,13 +16,15 @@ public class LLMManagerHttp : MonoBehaviour
     public SwitchView switchView;
 
     [Header("Gateway URL")]
-    public string gatewayUrl = "http://127.0.0.1:8000/command";
+    public string gatewayUrl = "<http://127.0.0.1:8000/command>";
 
     [Header("Debug UI output (optional)")]
     public TMPro.TMP_Text outputText;
 
     [Header("Scene State")]
     public SceneStateProvider sceneStateProvider;
+
+    private static readonly string NL = System.Environment.NewLine;
 
     [Serializable]
     class CommandRequest
@@ -60,7 +63,7 @@ public class LLMManagerHttp : MonoBehaviour
 
     public void SendUserText(string text)
     {
-        Debug.Log($"[LLM Debug] SendUserText called with text: '{text}'");
+        DLog.Verbose("LLM", "SendUserText called with text: '" + text + "'");
         StartCoroutine(CallGateway(text));
     }
 
@@ -68,7 +71,7 @@ public class LLMManagerHttp : MonoBehaviour
     {
         if (string.IsNullOrWhiteSpace(userText) || !commandCenter || !switchView)
         {
-            Debug.LogWarning("[LLM Debug] CallGateway aborted: invalid input or missing components");
+            DLog.Warn("LLM", "CallGateway aborted: invalid input or missing components");
             yield break;
         }
 
@@ -91,7 +94,7 @@ public class LLMManagerHttp : MonoBehaviour
         string json = JsonUtility.ToJson(reqObj);
         byte[] body = Encoding.UTF8.GetBytes(json);
 
-        Debug.Log($"[LLM Debug] Sending request to {gatewayUrl} with JSON: {json}");
+        DLog.Verbose("LLM", "Sending request to " + gatewayUrl);
 
         using (var req = new UnityWebRequest(gatewayUrl, "POST"))
         {
@@ -102,28 +105,30 @@ public class LLMManagerHttp : MonoBehaviour
 
             yield return req.SendWebRequest();
 
-            Debug.Log($"[LLM Debug] Response received with code: {req.responseCode}");
+            DLog.Verbose("LLM", "Response code: " + req.responseCode);
 
             if (req.result != UnityWebRequest.Result.Success)
             {
-                LogOut($"[LLM] Request failed: {req.error}");
-                Debug.LogError($"[LLM Debug] Full error details: {req.error} - Response: {req.downloadHandler.text}");
+                LogOut("[LLM] Request failed: " + req.error);
+                DLog.Error("LLM", "Full error: " + req.error +
+                           " - Response: " + req.downloadHandler.text);
                 yield break;
             }
 
             string respJson = req.downloadHandler.text;
-            Debug.Log($"[LLM Debug] Raw response JSON: {respJson}");
+            DLog.Verbose("LLM", "Raw response length: " + respJson.Length);
 
             LlmResponse resp;
             try
             {
                 resp = JsonUtility.FromJson<LlmResponse>(respJson);
-                Debug.Log($"[LLM Debug] JSON parsed successfully: say='{resp.say}', commands count={resp.commands?.Length ?? 0}");
+                DLog.Verbose("LLM", "Parsed: say='" + resp.say +
+                             "', cmds=" + (resp.commands?.Length ?? 0));
             }
             catch (Exception e)
             {
-                LogOut($"[LLM] JSON parse error: {e.Message}\nraw={respJson}");
-                Debug.LogError($"[LLM Debug] Parse exception: {e.StackTrace}");
+                LogOut("[LLM] JSON parse error: " + e.Message);
+                DLog.Error("LLM", "Parse exception: " + e.StackTrace);
                 yield break;
             }
 
@@ -146,11 +151,11 @@ public class LLMManagerHttp : MonoBehaviour
         return info ? info.gameObject.name : "";
     }
 
-       void Execute(LlmResponse resp)
+    void Execute(LlmResponse resp)
     {
         if (resp.commands == null || resp.commands.Length == 0)
         {
-            Debug.Log("[LLM] No commands in response");
+            DLog.Verbose("LLM", "No commands in response");
             return;
         }
 
@@ -172,14 +177,14 @@ public class LLMManagerHttp : MonoBehaviour
 
         // Execute all commands through CommandCenter
         string results = commandCenter.ExecuteCommands(cmds, currentDrone);
-        Debug.Log($"[LLM] Execution results:\\n{results}");
+        DLog.Info("LLM", "Execution results: " + results);
 
         // Show results in output (append to say text)
         if (!string.IsNullOrEmpty(results) && outputText)
         {
             string display = resp.say;
             if (!string.IsNullOrEmpty(display))
-                display += "\\n---\\n";
+                display += NL + "---" + NL;
             display += results;
             outputText.text = display;
         }
@@ -187,7 +192,7 @@ public class LLMManagerHttp : MonoBehaviour
 
     void LogOut(string msg)
     {
-        Debug.Log(msg);
+        DLog.Info("LLM", msg);
         if (outputText) outputText.text = msg;
     }
 }

@@ -112,7 +112,7 @@ public class PanelResizeController : MonoBehaviour
 
         _fullStateSaved = true;
 
-        Debug.Log($"[PanelResize] Full state saved: " +
+        DLog.Info("UI", $" Full state saved: " +
                   $"anchorMin={_fullAnchorMin}, anchorMax={_fullAnchorMax}, " +
                   $"pivot={_fullPivot}, pos={_fullAnchoredPos}, scale={_fullScale}");
     }

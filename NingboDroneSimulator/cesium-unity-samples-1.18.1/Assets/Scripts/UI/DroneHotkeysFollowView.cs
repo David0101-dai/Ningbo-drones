@@ -56,7 +56,7 @@ public class DroneHotkeysFollowView : MonoBehaviour
             if (nowPause) _paused.Add(nav); else _paused.Remove(nav);
 
             nav.SetEmergencyStop(nowPause); // 你原脚本已有，外部停止逻辑就是它【你之前贴的 DroneGeoNavigator 里有】
-            Debug.Log($"[HotkeysFollowView] {(nowPause ? "Pause" : "Resume")} {nav.gameObject.name}");
+            DLog.Info("Hotkeys", $" {(nowPause ? "Pause" : "Resume")} {nav.gameObject.name}");
         }
 
         // 加速/减速：同样只影响当前机
@@ -64,14 +64,14 @@ public class DroneHotkeysFollowView : MonoBehaviour
         {
             _speedCache[nav] += speedStep;
             nav.cruiseSpeed = _speedCache[nav];
-            Debug.Log($"[HotkeysFollowView] Speed {nav.gameObject.name} => {_speedCache[nav]:F1} m/s");
+            DLog.Info("Hotkeys", $" Speed {nav.gameObject.name} => {_speedCache[nav]:F1} m/s");
         }
 
         if (Input.GetKeyDown(speedDownKey) || Input.GetKeyDown(speedDownKeypad))
         {
             _speedCache[nav] = System.Math.Max(0.1, _speedCache[nav] - speedStep);
             nav.cruiseSpeed = _speedCache[nav];
-            Debug.Log($"[HotkeysFollowView] Speed {nav.gameObject.name} => {_speedCache[nav]:F1} m/s");
+            DLog.Info("Hotkeys", $" Speed {nav.gameObject.name} => {_speedCache[nav]:F1} m/s");
         }
     }
 }
